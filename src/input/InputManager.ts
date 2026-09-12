@@ -207,6 +207,36 @@ export class InputManager {
 
   confirmHandler: (() => void) | null = null;
   backHandler: (() => void) | null = null;
+  /** Moves DOM focus by `delta` steps; owned by the UI, which knows the visible order. */
+  focusMoveHandler: ((delta: number) => void) | null = null;
+
+  private padUi = { confirm: false, back: false, right: false, left: false, down: false, up: false };
+
+  /**
+   * A pad in a menu is a keyboard, not a steering wheel: it activates the focused control.
+   * Edge triggered, because `update` runs on every simulation step.
+   */
+  private pollUiPad(): void {
+    if (this.padIndex < 0) return;
+    const pad = navigator.getGamepads?.()[this.padIndex];
+    if (!pad) return;
+    const pressed = (index: number): boolean => !!pad.buttons[index]?.pressed;
+    const edge = (name: keyof InputManager['padUi'], now: boolean): boolean => {
+      const fired = now && !this.padUi[name];
+      this.padUi[name] = now;
+      return fired;
+    };
+    if (edge('confirm', pressed(PAD.boostButton) || pressed(PAD.abilityButton))) this.confirmHandler?.();
+    if (edge('back', pressed(PAD.driftButton) || pressed(PAD.pauseButton))) this.backHandler?.();
+    const axisX = pad.axes[PAD.steerAxis] ?? 0;
+    const axisY = pad.axes[1] ?? 0;
+    const right = axisX > 0.55 || pressed(PAD.dpad.right);
+    const left = axisX < -0.55 || pressed(PAD.dpad.left);
+    const down = axisY > 0.55 || pressed(PAD.dpad.down);
+    const up = axisY < -0.55 || pressed(PAD.dpad.up);
+    if (edge('right', right) || edge('left', left)) this.focusMoveHandler?.(right ? 1 : -1);
+    else if (edge('down', down) || edge('up', up)) this.focusMoveHandler?.(down ? 1 : -1);
+  }
 
   beginRebind(action: InputAction): Promise<string[] | null> {
     this.rebindAction = action;
@@ -275,6 +305,7 @@ export class InputManager {
       f.steer = 0;
       f.boost = false;
       f.drift = false;
+      this.pollUiPad();
       return f;
     }
 

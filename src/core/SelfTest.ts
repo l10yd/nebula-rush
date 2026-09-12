@@ -82,6 +82,8 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     const rt = app.runtime;
     if (!rt) throw new Error('runtime vanished during race');
     const start = { s: rt.player.s, score: rt.hud.score };
+    const sigA = entitySignature(rt.entities);
+    steps.push(`lane signature at start=${sigA}`);
     // Progress is measured in rendered frames, not wall clock: a software rasteriser may
     // take a tenth of a second per frame, and then elapsed time proves nothing.
     const tickStart = app.probeTick;
@@ -139,6 +141,77 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     } else {
       steps.push(`ended=false s=${(app.runtime?.player.s ?? 0).toFixed(0)}`);
     }
+    /* --------------------------------------------------- settings that must take effect */
+    const appEl = document.querySelector('.nr-app') as HTMLElement | null;
+    app.settings.patch({
+      reducedMotion: true,
+      screenShake: false,
+      colorSafe: true,
+      highContrastHud: true,
+      uiScale: 1.3,
+    });
+    app.applySettings();
+    await sleep(80);
+    const classes = appEl ? [...appEl.classList] : [];
+    const scale = appEl ? appEl.style.getPropertyValue('--nr-scale') : '';
+    steps.push(`a11y classes=${classes.filter((c) => c !== 'nr-app').join(',')} scale=${scale}`);
+    for (const needed of ['reduced-motion', 'colour-safe', 'high-contrast']) {
+      if (!classes.includes(needed)) errors.push(`accessibility class ${needed} was not applied`);
+    }
+    if (scale !== '1.3') errors.push(`ui scale is ${scale}, expected 1.3`);
+    app.settings.patch({ reducedMotion: false, screenShake: true, colorSafe: false, highContrastHud: false, uiScale: 1 });
+    app.applySettings();
+
+    /* --------------------------------------- the same seed must rebuild the same lane */
+    app.goto('main_menu');
+    await waitFor(() => app.phase === 'main_menu', 6000, 'menu after results');
+    app.goto('garage');
+    await waitFor(() => app.phase === 'garage', 6000, 'garage after results').catch(() => undefined);
+    steps.push(`garage reachable after results=${app.phase}`);
+    app.goto('briefing');
+    await waitFor(() => app.phase === 'briefing', 6000, 'briefing after garage').catch(() => undefined);
+
+    app.startRace({ mode: 'seed', difficulty: 'pilot', biome: 'collapse_field', seedText: 'SELFTEST-2024' });
+    await waitFor(() => app.phase === 'racing', 60000, 'second race with the same seed');
+    const rt2 = app.runtime;
+    if (!rt2) throw new Error('runtime missing on the second race');
+    const sigB = entitySignature(rt2.entities);
+    steps.push(`rerun signature=${sigB} match=${sigB === sigA}`);
+    if (sigB !== sigA) errors.push('the same seed generated a different lane on the second run');
+    app.goto('main_menu');
+    await waitFor(() => app.phase === 'main_menu', 8000, 'menu after rerun check').catch(() => undefined);
+
+    /* ------------------------------------------------------------- the daily star lane */
+    app.startRace({ mode: 'daily', difficulty: 'pilot', biome: 'deep_space', seedText: '' });
+    await waitFor(() => app.phase === 'racing', 90000, 'daily race');
+    const rtD = app.runtime;
+    const tag = document.querySelector('.nr-hud-daily') as HTMLElement | null;
+    const visible = !!tag && tag.style.display !== 'none' && (tag.textContent ?? '').length > 0;
+    steps.push(`daily racing s=${(rtD?.player.s ?? 0).toFixed(0)} hudTag=${visible ? tag?.textContent : 'hidden'}`);
+    if (!visible) errors.push('the daily lane does not announce itself in the HUD');
+    if (visible && !(tag?.textContent ?? '').includes(app.dailyKey())) {
+      errors.push(`the daily tag does not carry today's key (${app.dailyKey()})`);
+    }
+    if (rtD && entitySignature(rtD.entities) === sigA) errors.push('the daily lane is identical to the seeded lane');
+    app.goto('main_menu');
+    await waitFor(() => app.phase === 'main_menu', 8000, 'menu after daily check').catch(() => undefined);
+
+    /* --------------------------------------------------------- the top quality tier */
+    // This machine reports as a low-end device, so the device ceiling deliberately keeps the
+    // tier down. Raise it after the settings pass to exercise the top tier's shaders anyway.
+    app.settings.patch({ autoQuality: false, quality: 'ultra' });
+    app.applySettings();
+    app.quality.setCeiling('ultra');
+    app.renderer.applyQuality();
+    const ultraBefore = app.probeTick;
+    await waitFor(() => app.probeTick > ultraBefore + 14, 60000, 'ultra frames').catch(() => undefined);
+    const ultra = await probe(app);
+    steps.push(`ultra tier=${app.quality.current} pixels=${fmt(ultra)} draws=${app.renderer.stats.calls} tris=${app.renderer.stats.triangles}`);
+    if (app.quality.current !== 'ultra') errors.push(`ultra was requested but the tier is ${app.quality.current}`);
+    if (ultra.mean < 0 || ultra.max < 6) errors.push('ultra renders black');
+    app.settings.patch({ quality: 'low' });
+    app.applySettings();
+
     report.ok = errors.length === 0;
   } catch (error) {
     errors.push(`fatal: ${error instanceof Error ? error.message : String(error)}`);
@@ -160,6 +233,24 @@ async function probe(app: App): Promise<Probe> {
   const before = app.probeTick;
   await waitFor(() => app.probeTick > before, 2000, 'a rendered frame').catch(() => undefined);
   return app.readPixels() ?? { mean: -1, max: -1, lit: -1 };
+}
+
+/**
+ * Fingerprint of the generated lane. Comparing two of these across separate races is how the
+ * browser proves the seeded generator is still deterministic, without re-running the whole sim.
+ */
+function entitySignature(entities: readonly { kind: string; s: number; u: number; h: number; size: number; variant: number }[]): string {
+  let hash = 2166136261;
+  const limit = Math.min(entities.length, 320);
+  for (let i = 0; i < limit; i++) {
+    const e = entities[i];
+    const text = `${e.kind}${Math.round(e.s)}${Math.round(e.u * 50)}${Math.round(e.h * 50)}${Math.round(e.size * 100)}${e.variant};`;
+    for (let c = 0; c < text.length; c++) {
+      hash ^= text.charCodeAt(c);
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+  return `${entities.length}:${(hash >>> 0).toString(16)}`;
 }
 
 /** Finds text that still looks like an i18n key (`brief.title`) rather than translated copy. */

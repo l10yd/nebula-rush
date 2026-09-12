@@ -152,6 +152,7 @@ export class App implements ScreenHost {
     window.addEventListener('pointerdown', unlock, { once: false });
     window.addEventListener('keydown', unlock, { once: false });
     this.input.onGamepadChange = (connected) => this.ui.toast(connected ? 'toast.gamepadOn' : 'toast.gamepadOff');
+    this.wireUiGamepad();
     this.offs.push(this.i18nOff());
     const canvas = this.renderer.renderer.domElement;
     canvas.addEventListener('webglcontextlost', (event) => {
@@ -431,6 +432,9 @@ export class App implements ScreenHost {
     this.rt.reset();
     this.lastCountdownShown = -1;
     this.renderer.bindRuntime(this.rt);
+    // A new run must not inherit the previous run's cached readouts or flash states.
+    this.ui.hud.reset();
+    this.ui.hud.arm(this.pendingRequest?.mode === 'daily' ? `${i18n.t('daily.title')} · ${this.dailyKey()}` : null);
   }
 
   private bindRaceEvents(rt: RaceRuntime): void {
@@ -652,32 +656,30 @@ export class App implements ScreenHost {
     const target = event.target as HTMLElement | null;
     if (target?.tagName === 'INPUT') return;
     if (document.querySelector('.nr-keybind.is-listening')) return;
+    event.preventDefault();
+    this.escapeNav();
+  };
+
+  /**
+   * The one "get me out of here" action, shared by the Escape key and the pad's back button so
+   * both navigate through the same phase graph.
+   */
+  private escapeNav(): void {
     switch (this.sm.phase) {
       case 'settings':
       case 'howto':
-        event.preventDefault();
-        event.preventDefault();
         this.sm.go(this.returnFromSettings);
         break;
       case 'garage':
-        event.preventDefault();
-        this.sm.go('main_menu');
-        break;
       case 'briefing':
-        event.preventDefault();
-        this.sm.go('main_menu');
-        break;
       case 'results':
-        event.preventDefault();
         this.sm.go('main_menu');
         break;
       case 'paused':
-        event.preventDefault();
         this.sm.go('racing');
         break;
       case 'racing':
       case 'countdown':
-        event.preventDefault();
         this.sm.go('paused');
         break;
       default:
@@ -687,8 +689,36 @@ export class App implements ScreenHost {
 
   private step(dt: number): void {
     this.sm.update(dt);
+    // Menus still need the pad polled; the race phases do that inside raceUpdate.
+    const phase = this.sm.phase;
+    if (phase !== 'racing' && phase !== 'countdown' && phase !== 'paused' && phase !== 'finish') {
+      this.input.update(dt);
+    }
   }
 
+  /**
+   * Gamepad menu navigation: A activates the focused control, B/Start goes back, and the stick
+   * or d-pad walks focus. Without this the pads would only work inside a race.
+   */
+  private wireUiGamepad(): void {
+    this.input.confirmHandler = () => {
+      const node = document.activeElement;
+      if (node instanceof HTMLElement && node !== document.body) node.click();
+    };
+    this.input.backHandler = () => this.escapeNav();
+    this.input.focusMoveHandler = (delta) => {
+      const nodes = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '.nr-screen.is-active button, .nr-screen.is-active input, .nr-screen.is-active [role="button"]',
+        ),
+      );
+      if (!nodes.length) return;
+      const focused = document.activeElement;
+      const at = focused instanceof HTMLElement ? nodes.indexOf(focused) : -1;
+      const next = at < 0 ? 0 : (at + delta + nodes.length) % nodes.length;
+      nodes[next]?.focus();
+    };
+  }
   private draw(frameMs: number): void {
     if (this.pixelProbe) {
       // Composer passes each reset the counter, so accumulate the whole frame instead.
