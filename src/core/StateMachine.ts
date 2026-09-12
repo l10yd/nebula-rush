@@ -68,6 +68,9 @@ export class StateMachine<C> {
   }
 
   go(to: GamePhase): boolean {
+    // Re-entering the current phase is a no-op, not a violation: menus ask to open
+    // what is already open, and that should not look like an error in the console.
+    if (this.current === to) return true;
     if (!this.can(to)) {
       console.warn(`[nebula] Blocked state transition ${String(this.current)} → ${to}`);
       return false;
