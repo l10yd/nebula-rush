@@ -1,5 +1,5 @@
 import { BOOST, CAMERA, COMBO, DIFFICULTY, DRIVING, LANE, POWER } from '../data/config.ts';
-import type { DifficultyId } from '../data/types.ts';
+import type { DifficultyId, ScoreBreakdown } from '../data/types.ts';
 import { clamp, clamp01, damp, lerp } from '../utils/math.ts';
 import type { InputFrame } from '../input/InputManager.ts';
 
@@ -73,6 +73,9 @@ export class PlayerState {
   flash = 0;
 
   lastSkill: SkillMoment | null = null;
+  /** Score accounting, split the way the results screen presents it. */
+  readonly parts: ScoreBreakdown = { distance: 0, skill: 0, combo: 0, finish: 0 };
+
   stats = {
     nearMisses: 0,
     gates: 0,
@@ -168,6 +171,10 @@ export class PlayerState {
     this.shakeImpulse = 0;
     this.flash = 0;
     this.lastSkill = null;
+    this.parts.distance = 0;
+    this.parts.skill = 0;
+    this.parts.combo = 0;
+    this.parts.finish = 0;
     this.stats = {
       nearMisses: 0,
       gates: 0,
@@ -192,9 +199,13 @@ export class PlayerState {
     this.abilityCharge = Math.min(BOOST.abilityCostEvents, this.abilityCharge + 1);
   }
 
-  addScore(base: number, skill = false): number {
+  addScore(base: number, skill = false, bucket: 'distance' | 'skill' | 'finish' = skill ? 'skill' : 'distance'): number {
     const gained = Math.round(base * this.multiplier);
     this.score += gained;
+    // Keep the buckets additive: the chain bonus is its own line, not a re-count.
+    this.parts[bucket] += base;
+    const bonus = gained - base;
+    if (bonus > 0) this.parts.combo += bonus;
     if (skill) this.noteSkill('score');
     return gained;
   }

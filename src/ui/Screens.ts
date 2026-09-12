@@ -45,6 +45,7 @@ export interface ScreenHost {
   resetBindings(): void;
   resetSave(): void;
   summarize(difficulty: DifficultyId, mode: RaceMode): TrackSummary;
+  returnTarget(): GamePhase;
   deviceSummary(): string;
   audioBlocked(): boolean;
 }
@@ -813,7 +814,14 @@ export class ResultsScreen extends Screen {
         r.newBestTime ? el('span', { class: 'nr-badge is-best', text: i18n.t('results.newTimeRecord') }) : null,
         el('span', { class: 'nr-price', text: `${i18n.t('results.seed')}: ${r.seed}` }),
       ].filter(Boolean) as HTMLElement[] }),
+      el('h3', { class: 'nr-heading', text: i18n.t('results.breakdown') }),
       el('dl', { class: 'nr-col nr-results-grid', children: list }),
+      el('dl', { class: 'nr-col nr-results-grid', children: [
+        stat('results.distPoints', formatNumber(r.breakdown.distance)),
+        stat('results.skillPoints', formatNumber(r.breakdown.skill)),
+        stat('results.comboPoints', formatNumber(r.breakdown.combo)),
+        stat('results.finishPoints', formatNumber(r.breakdown.finish)),
+      ] }),
       el('dl', { class: 'nr-stat nr-results-total', children: [
         el('dt', { text: i18n.t('results.credits') }),
         el('dd', { text: `+${formatNumber(r.credits)}` }),

@@ -65,15 +65,27 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     const rt = app.runtime;
     if (!rt) throw new Error('runtime vanished during race');
     const start = { s: rt.player.s, score: rt.hud.score };
-    await sleep(2500);
-    const racing = await probe(app);
+    // Progress is measured in rendered frames, not wall clock: a software rasteriser may
+    // take a tenth of a second per frame, and then elapsed time proves nothing.
+    const tickStart = app.probeTick;
+    // A single black frame is reportable, but it may also be a momentary darkness inside a
+    // spectacle. Take a run of samples so the two are distinguishable.
+    const shots: string[] = [];
+    let dark = 0;
+    for (let i = 0; i < 5; i++) {
+      const sample = await probe(app);
+      shots.push(fmt(sample));
+      if (sample.lit < 0.1) dark++;
+    }
+    await waitFor(() => app.probeTick > tickStart + 90, 120000, 'ninety rendered frames');
+    const st = rt.spectacle.state;
     const info = app.renderer.stats;
     const scene = app.renderer.sceneInfo;
     steps.push(
       `racing s=${rt.player.s.toFixed(0)} speed=${rt.hud.speed.toFixed(0)} score=${rt.hud.score} chain=${rt.hud.chain} particles=${app.renderer.particleCount} props=${scene.props} draws=${info.calls} tris=${info.triangles}`,
     );
-    steps.push(`racing pixels=${fmt(racing)} tier=${app.quality.current}`);
-    expectLit(racing, errors, 'race framebuffer');
+    steps.push(`racing pixels=[${shots.join(' ')}] tier=${app.quality.current} warp=${st.warp.toFixed(2)} interior=${st.interior.toFixed(2)} vortex=${st.vortex.toFixed(2)}`);
+    if (dark >= 4) errors.push(`race framebuffer was black in ${dark}/5 samples`);
     if (rt.player.s <= start.s + 5) errors.push('ship did not advance along the lane');
     if (info.calls < 3) errors.push(`suspiciously few draw calls: ${info.calls}`);
     if (!scene.tunnel) errors.push('no tunnel mesh in the scene');
@@ -97,6 +109,7 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     // A wrecked or finished run both prove the end-of-race path; either is acceptable.
     const ended = await until(() => app.phase === 'finish' || app.phase === 'results', 45000);
     if (ended) {
+      await waitFor(() => app.phase === 'results', 8000, 'results panel').catch(() => undefined);
       const result = document.querySelector('[data-screen="results"]')?.classList.contains('is-active');
       steps.push(`ended phase=${app.phase} resultsShown=${!!result}`);
     } else {

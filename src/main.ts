@@ -34,6 +34,7 @@ import { QualityManager } from './rendering/QualityManager.ts';
 import type { RaceRequest, ScreenHost, TrackSummary } from './ui/Screens.ts';
 import { UIManager } from './ui/UIManager.ts';
 import { el } from './ui/dom.ts';
+import { TiltSteering } from './input/TiltSteering.ts';
 import { runSelfTest } from './core/SelfTest.ts';
 
 /** Context handed to the state machine. One instance for the lifetime of the page. */
@@ -60,6 +61,8 @@ export class App implements ScreenHost {
   private track: RenderableTrack | null = null;
   private raceUnsubs: (() => void)[] = [];
   private lastCountdownShown = -1;
+  private tilt: TiltSteering | null = null;
+  private returnFromSettings: GamePhase = 'main_menu';
   private seedText = makeSeed('NEBULA', 1);
   private pendingRequest: RaceRequest | null = null;
   private lastResult: RaceResult | null = null;
@@ -97,6 +100,7 @@ export class App implements ScreenHost {
     this.wireLifecycle();
     this.sm.onTransition((from, to) => {
       this.smCtx.from = from;
+      if (to === 'settings' && from && from !== 'settings') this.returnFromSettings = from;
       this.ui.setPhase(to, to === 'results' ? this.lastResult ?? undefined : undefined);
     });
     this.ui.setPhase(this.sm.phase);
@@ -160,6 +164,7 @@ export class App implements ScreenHost {
       this.loop?.start();
     });
     window.addEventListener('beforeunload', () => this.save.flush());
+    window.addEventListener('keydown', this.onGlobalKey);
   }
 
   private i18nOff(): () => void {
@@ -213,6 +218,7 @@ export class App implements ScreenHost {
     this.audio.setVolumes(this.volumes());
     this.audio.setDucking(s.musicDucking);
     this.renderer.setMotionSettings(s.reducedMotion, s.screenShake);
+    this.syncTilt(s.tiltSteering);
     this.ui.applySettings();
     this.renderer.resize(window.innerWidth, window.innerHeight);
     if (s.quality !== this.quality.current && !s.autoQuality) this.quality.setCeiling(this.progress.effectiveQuality(s.quality));
@@ -223,6 +229,11 @@ export class App implements ScreenHost {
     else void requestFullscreen(this.ui.app);
   }
 
+  /** Where the back button in settings should lead: menu, or straight back to the race. */
+  returnTarget(): GamePhase {
+    return this.returnFromSettings;
+  }
+
   rebind(action: InputAction): void {
     this.ui.settingsScreen().setListening(action);
     void this.input.beginRebind(action).then((codes) => {
@@ -231,6 +242,8 @@ export class App implements ScreenHost {
         this.ui.toast('toast.rebindCancel');
         return;
       }
+      const clash = BIND_SEARCH.find(this.settings.value.keybinds, codes, action);
+      if (clash) this.ui.toast('settings.conflict');
       this.settings.setKeybind(action, codes);
       this.input.setBindings(this.settings.value.keybinds);
       this.ui.toast('toast.rebindDone');
@@ -260,6 +273,18 @@ export class App implements ScreenHost {
       parSeconds: mode === 'daily' ? DAILY_LENGTH_METRES / (tuning.maxSpeed * RACE.avgSpeedRatio) : RACE.targetSeconds,
       seedText,
     };
+  }
+
+  /** Tilt is opt-in and needs a gesture to gain permission on iOS, hence the sync here. */
+  private syncTilt(on: boolean): void {
+    if (!on) {
+      this.tilt?.disable();
+      return;
+    }
+    this.tilt ??= new TiltSteering(this.input);
+    if (!this.tilt.active) void this.tilt.enable().then((granted) => {
+      if (!granted) this.ui.toast('toast.tiltDenied');
+    });
   }
 
   deviceSummary(): string {
@@ -565,6 +590,7 @@ export class App implements ScreenHost {
       hits: p.hits,
       shieldSaves: p.stats.shieldSaves,
       abilityUses: p.abilityUses,
+      breakdown: { ...p.parts },
       topSpeed: p.topSpeed,
       ship: this.progress.value.selectedShip,
       seed: rt.config.seed,
@@ -615,6 +641,49 @@ export class App implements ScreenHost {
     const fps = this.loop ? this.loop.stats.fps : 1000 / Math.max(1, frameMs);
     this.ui.hud.setFps(fps);
   }
+
+  /**
+   * Escape is the one navigation key that must work everywhere, including inside menus where
+   * the race input poll is not running. It steps back through the phase graph rather than
+   * jumping to the root, and stays out of the way while a keybind is being captured.
+   */
+  private onGlobalKey = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape') return;
+    const target = event.target as HTMLElement | null;
+    if (target?.tagName === 'INPUT') return;
+    if (document.querySelector('.nr-keybind.is-listening')) return;
+    switch (this.sm.phase) {
+      case 'settings':
+      case 'howto':
+        event.preventDefault();
+        event.preventDefault();
+        this.sm.go(this.returnFromSettings);
+        break;
+      case 'garage':
+        event.preventDefault();
+        this.sm.go('main_menu');
+        break;
+      case 'briefing':
+        event.preventDefault();
+        this.sm.go('main_menu');
+        break;
+      case 'results':
+        event.preventDefault();
+        this.sm.go('main_menu');
+        break;
+      case 'paused':
+        event.preventDefault();
+        this.sm.go('racing');
+        break;
+      case 'racing':
+      case 'countdown':
+        event.preventDefault();
+        this.sm.go('paused');
+        break;
+      default:
+        break;
+    }
+  };
 
   private step(dt: number): void {
     this.sm.update(dt);
@@ -761,6 +830,17 @@ function sleep(ms: number): Promise<void> {
 }
 
 /* ------------------------------------------------------------------- entry */
+
+/** Reports a binding that already belongs to another action. */
+const BIND_SEARCH = {
+  find(map: Record<string, string[]>, codes: string[], ignore: string): string | null {
+    for (const [action, list] of Object.entries(map)) {
+      if (action === ignore) continue;
+      if (list.some((code) => codes.includes(code))) return action;
+    }
+    return null;
+  },
+};
 
 function showError(error: unknown): void {
   const root = document.getElementById('root');

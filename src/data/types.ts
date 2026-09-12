@@ -83,7 +83,16 @@ export interface RaceStats {
   abilityUses: number;
 }
 
+export interface ScoreBreakdown {
+  distance: number;
+  skill: number;
+  combo: number;
+  finish: number;
+}
+
 export interface RaceResult extends RaceStats {
+  /** Where the score came from, measured rather than estimated. */
+  breakdown: ScoreBreakdown;
   seed: string;
   mode: RaceMode;
   difficulty: DifficultyId;

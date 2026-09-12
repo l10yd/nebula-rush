@@ -412,6 +412,8 @@ export class RaceRuntime {
       this.status = 'finished';
       this.player.finished = true;
       this.player.finishTime = this.raceClock;
+      // Reaching the end is its own reward line on the results screen.
+      this.player.addScore(Math.round(450 * this.player.tuning.scoreMultiplier), false, 'finish');
     }
   }
 

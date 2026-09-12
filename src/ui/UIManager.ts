@@ -21,7 +21,6 @@ const SCREEN_FOR_PHASE: Partial<Record<GamePhase, 'loading' | 'main' | 'garage' 
   howto: 'howto',
   briefing: 'briefing',
   paused: 'pause',
-  finish: 'results',
   results: 'results',
 };
 
