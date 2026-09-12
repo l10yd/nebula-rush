@@ -9,7 +9,7 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.tests.json",
-    "test": "node --experimental-transform-types --no-warnings --test tests/"
+    "test": "node --experimental-transform-types --no-warnings --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "three": "0.169.0"

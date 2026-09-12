@@ -1,4 +1,4 @@
-import { SAVE_VERSION, STORAGE_KEY } from '../data/config.ts';
+import { COSMETIC_PRICES, SAVE_VERSION, STORAGE_KEY } from '../data/config.ts';
 import type { BiomeId, DifficultyId, InputAction, Locale, Progress, QualityTier, SaveData, Settings, ShipId, TrailId } from '../data/types.ts';
 import { boolOr, clamp, intOr, numOr, strOr } from '../utils/math.ts';
 import { SafeStorage, type Capabilities } from './Platform.ts';
@@ -88,6 +88,8 @@ export function defaultSave(caps?: Capabilities): SaveData {
   const now = Date.now();
   return { version: SAVE_VERSION, settings: defaultSettings(caps), progress: defaultProgress(), createdAt: now, updatedAt: now };
 }
+
+const COSMETIC_IDS: readonly string[] = Object.keys(COSMETIC_PRICES.cosmetic);
 
 function sanitizeLocale(v: unknown, fallback: Locale): Locale {
   return v === 'en' || v === 'ru' ? v : fallback;
@@ -185,7 +187,9 @@ function sanitizeProgress(raw: unknown, fallback: Progress): Progress {
     unlockedDifficulties: unlockedDifficulties.length
       ? Array.from(new Set([...unlockedDifficulties, 'novice' as DifficultyId, 'pilot' as DifficultyId])).sort((a, b) => DIFFS.indexOf(a) - DIFFS.indexOf(b))
       : ['novice', 'pilot'],
-    ownedCosmetics: sanitizeStringList(o.ownedCosmetics, ['hud_frame', 'trail_sparkle', 'collapse_trail', 'glass_dome']),
+    // Derived from the catalogue so a purchasable id can never be dropped by the sanitizer
+    // and silently vanish from the save on the next load.
+    ownedCosmetics: sanitizeStringList(o.ownedCosmetics, COSMETIC_IDS),
     selectedShip: pick(o.selectedShip, SHIPS, 'vireo', unlockedShips),
     selectedTrail: pick(o.selectedTrail, TRAILS, 'cyan', unlockedTrails),
     selectedBiome: pick(o.selectedBiome, BIOMES, 'deep_space', unlockedBiomes),
@@ -211,7 +215,7 @@ function migrate(data: SaveData): SaveData {
 export class SaveSystem {
   data: SaveData;
   private dirty = false;
-  private timer = 0;
+  private timer: ReturnType<typeof setTimeout> | 0 = 0;
 
   constructor(private readonly storage: SafeStorage, caps?: Capabilities) {
     this.data = defaultSave(caps);
@@ -266,7 +270,8 @@ export class SaveSystem {
       return;
     }
     if (this.timer) return;
-    this.timer = window.setTimeout(() => {
+    // The bare global, not window: the save layer has to work in a test runner too.
+    this.timer = setTimeout(() => {
       this.timer = 0;
       this.flush();
     }, 600);

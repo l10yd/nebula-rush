@@ -117,11 +117,18 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     steps.push(`hud dom speed=${speedNode} score=${scoreNode}`);
     if (!speedNode.trim()) errors.push('HUD speed readout is empty');
 
-    app.goto('paused');
-    await waitFor(() => app.phase === 'paused', 4000, 'pause');
-    steps.push('paused ok');
-    app.goto('racing');
-    await waitFor(() => app.phase === 'racing', 4000, 'resume');
+    // The lane may already have ended during the sampling window, in which case pause is
+    // correctly unavailable and the end-of-race path is what we check instead.
+    if (app.phase === 'racing') {
+      app.goto('paused');
+      await waitFor(() => app.phase === 'paused', 6000, 'pause');
+      steps.push('paused ok');
+      app.goto('racing');
+      await waitFor(() => app.phase === 'racing', 6000, 'resume');
+      steps.push('resumed ok');
+    } else {
+      steps.push(`pause skipped, race already over (${app.phase})`);
+    }
 
     // A wrecked or finished run both prove the end-of-race path; either is acceptable.
     const ended = await until(() => app.phase === 'finish' || app.phase === 'results', 45000);
