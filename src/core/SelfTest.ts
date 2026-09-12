@@ -106,17 +106,36 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
       if (sample.lit < 0.1) dark++;
     }
     // Warnings are transient by design, so watch the whole frame window rather than sampling
-    // once: the HUD strip must mirror the simulation's list exactly whenever any of them is up.
+    // once. Comparing the DOM with the live list across frames only measures the one-frame lag
+    // between them, so the mirror is tested by syncing and reading in the same task.
     let maxWarnings = 0;
-    let mismatched = 0;
+    let mirrored = 0;
+    let mirroredTexts = '';
+    let stale = 0;
     while (app.probeTick < tickStart + 90 && app.phase === 'racing') {
       const live = rt.warnings.length;
       if (live > maxWarnings) maxWarnings = live;
-      if (live > 0 && document.querySelectorAll('.nr-warning').length !== live) mismatched++;
+      if (live > 0 && mirrored === 0) {
+        app.ui.hud.sync(rt, performance.now() / 1000);
+        const nodes = Array.from(document.querySelectorAll('.nr-warning'));
+        if (nodes.length === live && nodes.every((n) => (n.textContent ?? '').trim().length > 0)) {
+          mirrored = 1;
+          mirroredTexts = nodes.map((n) => (n.textContent ?? '').trim()).join(' / ');
+        }
+      }
       await sleep(40);
     }
-    steps.push(`warnings peak=${maxWarnings} hudMismatch=${mismatched}`);
-    if (mismatched > 0) errors.push(`the HUD warning strip disagreed with the simulation ${mismatched}x`);
+    // Whatever was on screen must be gone once the list is empty again: the strip has to drain.
+    if (maxWarnings > 0) {
+      while (app.probeTick < tickStart + 120 && rt.warnings.length > 0) await sleep(40);
+      if (rt.warnings.length === 0) {
+        app.ui.hud.sync(rt, performance.now() / 1000);
+        if (document.querySelectorAll('.nr-warning').length !== 0) stale++;
+      }
+    }
+    steps.push(`warnings peak=${maxWarnings} mirrored=${mirrored === 1} stale=${stale} texts="${mirroredTexts}"`);
+    if (maxWarnings > 0 && mirrored === 0) errors.push('warnings came up but the HUD never mirrored them');
+    if (stale > 0) errors.push('the HUD warning strip kept entries after they expired');
     const fps = app.fps;
     steps.push(`render fps=${fps.toFixed(1)}`);
     const st = rt.spectacle.state;

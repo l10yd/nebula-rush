@@ -67,6 +67,9 @@ export class Hud {
 
     append(this.root, [
       el('div', { class: 'nr-hud-top', children: [this.objective, el('div', { class: 'nr-row', children: [this.fps, this.daily] })] }),
+      // The warning strip belongs to the top band: it must stay readable without ever reaching
+      // into the centre of the frame where the lane is.
+      this.warnings,
       el('div', { class: 'nr-hud-mid', children: [this.combo, this.flash] }),
       el('div', { class: 'nr-hud-bottom', children: [speedBlock, stack, readouts] }),
       this.countdown,
