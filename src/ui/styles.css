@@ -322,6 +322,9 @@ h1, h2, h3, p { margin: 0; }
 
 .nr-hud-warnings { position: absolute; top: 3.5rem; left: 50%; transform: translateX(-50%); display: flex; gap: 0.5rem; }
 .nr-warning { padding: 0.3rem 0.7rem; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--nr-danger); border: 1px solid currentColor; border-radius: 8px; background: rgba(6, 10, 20, 0.55); animation: nr-warn 700ms steps(2, jump-none) infinite; }
+/* Direction is carried by a glyph, not only by colour, so the cue survives colour-safe mode. */
+.nr-warning.is-side-left::before { content: "\25C0\00a0"; }
+.nr-warning.is-side-right::after { content: "\00a0\25B6"; }
 @keyframes nr-warn { 50% { opacity: 0.45; } }
 
 .nr-hud-combo { font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0; transition: opacity var(--nr-fast), transform var(--nr-fast); }

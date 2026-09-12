@@ -51,6 +51,23 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
 
     app.goto('main_menu');
     await waitFor(() => app.phase === 'main_menu', 4000, 'back to menu');
+    // Both locales must be complete: a raw key rendering on screen is a visible bug, and the
+    // dictionary types only guarantee coverage at compile time in one direction.
+    for (const locale of ['ru', 'en'] as const) {
+      app.settings.set('locale', locale);
+      app.applySettings();
+      await sleep(120);
+      for (const phase of ['main_menu', 'briefing', 'garage', 'settings', 'howto'] as const) {
+        app.goto(phase);
+        await waitFor(() => app.phase === phase, 4000, `enter ${phase} (${locale})`).catch(() => undefined);
+        const leak = rawKeyLeak();
+        steps.push(`locale=${locale} ${phase} leak=${leak || 'none'}`);
+        if (leak) errors.push(`${locale}/${phase} shows an untranslated key: ${leak}`);
+      }
+      app.goto('main_menu');
+      await waitFor(() => app.phase === 'main_menu', 4000, 'menu after locale').catch(() => undefined);
+    }
+
 
     app.startRace({ mode: 'seed', difficulty: 'pilot', biome: 'collapse_field', seedText: 'SELFTEST-2024' });
     await waitFor(() => app.phase === 'countdown' || app.phase === 'racing', 25000, 'start race');
@@ -136,6 +153,18 @@ async function probe(app: App): Promise<Probe> {
   const before = app.probeTick;
   await waitFor(() => app.probeTick > before, 2000, 'a rendered frame').catch(() => undefined);
   return app.readPixels() ?? { mean: -1, max: -1, lit: -1 };
+}
+
+/** Finds text that still looks like an i18n key (`brief.title`) rather than translated copy. */
+function rawKeyLeak(): string {
+  const active = document.querySelector('.nr-screen.is-active');
+  if (!active) return '';
+  const lines = (active.textContent ?? '').split(/[\n\r]+/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^[a-z][a-z0-9]{2,12}\.[a-z][A-Za-z0-9]{2,}$/.test(trimmed)) return trimmed;
+  }
+  return '';
 }
 
 function expectLit(probe: Probe, errors: string[], what: string): void {

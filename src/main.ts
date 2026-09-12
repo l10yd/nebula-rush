@@ -777,7 +777,8 @@ export class App implements ScreenHost {
     for (let gy = 0; gy < 3; gy++) {
       for (let gx = 0; gx < 3; gx++) {
         const x = Math.floor(((gx + 0.5) / 3) * w);
-        const y = Math.floor(((gy + 0.5) / 2.4) * h);
+        const y = Math.floor(((gy + 0.5) / 3) * h);
+        if (x >= w || y >= h) continue;
         gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.probeBuf);
         const luma = 0.2126 * this.probeBuf[0] + 0.7152 * this.probeBuf[1] + 0.0722 * this.probeBuf[2];
         sum += luma;

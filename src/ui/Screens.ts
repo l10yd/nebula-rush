@@ -46,6 +46,7 @@ export interface ScreenHost {
   resetSave(): void;
   summarize(difficulty: DifficultyId, mode: RaceMode): TrackSummary;
   returnTarget(): GamePhase;
+  dailyKey(): string;
   deviceSummary(): string;
   audioBlocked(): boolean;
 }
@@ -351,7 +352,9 @@ export class BriefingScreen extends Screen {
   }
 
   private dailyPanel(): HTMLElement {
-    const entry = this.host.progress.value.daily[new Date().toISOString().slice(0, 10)];
+    // The day key comes from the host: it is the same derivation the seed and the save use,
+    // and a locally formatted date here would silently never match a stored best.
+    const entry = this.host.progress.value.daily[this.host.dailyKey()];
     return el('div', { class: 'nr-col nr-daily', children: [
       el('div', { class: 'nr-row', children: [el('span', { class: 'nr-badge is-daily', text: i18n.t('daily.title') }), el('span', { class: 'nr-card-desc', text: i18n.t('daily.note') })] }),
       el('div', { class: 'nr-row', children: [
