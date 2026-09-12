@@ -136,6 +136,9 @@ export class App implements ScreenHost {
     this.offs.push(onVisibility((hidden) => {
       if (hidden) {
         this.save.flush();
+        // Freezing the loop is not enough: without this the player comes back mid-flight with
+        // no chance to read the state they left.
+        if (this.sm.phase === 'racing' || this.sm.phase === 'countdown') void this.sm.go('paused');
         this.loop?.setPaused(true);
       } else {
         this.loop?.setPaused(false);
@@ -200,11 +203,13 @@ export class App implements ScreenHost {
   startRace(request: RaceRequest): void {
     this.pendingRequest = request;
     if (request.mode === 'seed' && request.seedText) this.seedText = normalizeSeedInput(request.seedText);
-    void this.sm.go('loading');
-    if (!this.sm.can('loading')) {
-      // Loading is only reachable from the menu phases; from briefing we jump straight in.
-      void this.beginRace(request);
-    }
+    // A race can always be started from the root menu; if this screen has no direct edge into
+    // the race flow, step back there first rather than swallowing the press.
+    if (!this.sm.can('loading') && !this.sm.can('countdown')) void this.sm.go('main_menu');
+    // Decide before transitioning: after a successful go('loading') the machine sits *in*
+    // loading, and asking again would start a second concurrent load.
+    if (this.sm.can('loading')) void this.sm.go('loading');
+    else void this.beginRace(request);
   }
 
   previewSetup(): void {
@@ -785,6 +790,11 @@ export class App implements ScreenHost {
 
   get runtime(): RaceRuntime | null {
     return this.rt;
+  }
+
+  /** Measured frame rate, or 0 before the loop starts. */
+  get fps(): number {
+    return this.loop ? this.loop.stats.fps : 0;
   }
 
   /** Latest framebuffer probe, or null before the first sampled frame. */

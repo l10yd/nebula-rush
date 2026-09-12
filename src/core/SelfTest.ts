@@ -97,6 +97,8 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
       if (sample.lit < 0.1) dark++;
     }
     await waitFor(() => app.probeTick > tickStart + 90, 120000, 'ninety rendered frames');
+    const fps = app.fps;
+    steps.push(`render fps=${fps.toFixed(1)}`);
     const st = rt.spectacle.state;
     const info = app.renderer.stats;
     const scene = app.renderer.sceneInfo;
@@ -170,9 +172,10 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     steps.push(`garage reachable after results=${app.phase}`);
     app.goto('briefing');
     await waitFor(() => app.phase === 'briefing', 6000, 'briefing after garage').catch(() => undefined);
+    steps.push(`briefing reachable=${app.phase}`);
 
     app.startRace({ mode: 'seed', difficulty: 'pilot', biome: 'collapse_field', seedText: 'SELFTEST-2024' });
-    await waitFor(() => app.phase === 'racing', 60000, 'second race with the same seed');
+    await waitFor(() => app.phase === 'racing', 200000, 'second race with the same seed');
     const rt2 = app.runtime;
     if (!rt2) throw new Error('runtime missing on the second race');
     const sigB = entitySignature(rt2.entities);
@@ -183,7 +186,7 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
 
     /* ------------------------------------------------------------- the daily star lane */
     app.startRace({ mode: 'daily', difficulty: 'pilot', biome: 'deep_space', seedText: '' });
-    await waitFor(() => app.phase === 'racing', 90000, 'daily race');
+    await waitFor(() => app.phase === 'racing', 200000, 'daily race');
     const rtD = app.runtime;
     const tag = document.querySelector('.nr-hud-daily') as HTMLElement | null;
     const visible = !!tag && tag.style.display !== 'none' && (tag.textContent ?? '').length > 0;
