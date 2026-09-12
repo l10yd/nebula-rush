@@ -23,7 +23,7 @@ const GradeShader = {
     uDanger: { value: 0 },
     uBoost: { value: 0 },
     uDesaturate: { value: 0 },
-    uExposure: { value: 1.06 },
+    uExposure: { value: 1.0 },
     uScanline: { value: 0 },
     uResolution: { value: new Vector2(1, 1) },
     uFlash: { value: new Vector2(0, 0) },

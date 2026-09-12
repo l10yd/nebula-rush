@@ -93,10 +93,10 @@ export class PropField {
     const wreckage = standardMaterial('wreck', { rock: biome.palette.deep, metal: biome.tunnelTint });
 
     const glow = (hex: string, intensity: number) => emissiveMaterial(hex, intensity);
-    const accent = glow(biome.palette.accent, 1.7);
-    const hot = glow(biome.palette.hot, 1.5);
-    const danger = glow(biome.palette.danger, 1.4);
-    const alt = glow(biome.palette.accentAlt, 1.25);
+    const accent = glow(biome.palette.accent, 0.95);
+    const hot = glow(biome.palette.hot, 0.9);
+    const danger = glow(biome.palette.danger, 0.85);
+    const alt = glow(biome.palette.accentAlt, 0.7);
 
     this.add('rock0', asteroidGeometry(0, detail), rock, 'rock');
     this.add('rock1', asteroidGeometry(1, detail), rock, 'rock');

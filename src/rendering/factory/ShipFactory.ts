@@ -259,9 +259,9 @@ export function createShipVisual(ship: ShipTuning, trail: TrailTuning, cosmetics
   root.add(dressing);
   const hull = hullMaterial(ship.hull);
   const darkHull = hullMaterial('#2a3040');
-  const accent = emissiveMaterial(ship.accent, 1.9);
-  const core = emissiveMaterial(trail.core, 2.4);
-  const halo = emissiveMaterial(trail.halo, 1.8);
+  const accent = emissiveMaterial(ship.accent, 1.1);
+  const core = emissiveMaterial(trail.core, 1.35);
+  const halo = emissiveMaterial(trail.halo, 1.0);
   const disposables = new Set<BufferGeometry>();
   const ownedMaterials = new Set<MeshBasicMaterial | MeshStandardMaterial>();
 

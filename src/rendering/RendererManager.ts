@@ -52,6 +52,14 @@ const QUAT = new Quaternion();
 const VEC = new Vector3();
 
 /**
+ * Bloom budget. The corridor is built from emissive strips; blooming at strength 0.78 with a
+ * 0.58 threshold made nearly every panel glow and turned each row of arches flown through into
+ * a full-screen white-out. Only genuinely over-range highlights bloom now, softly. Reduced
+ * motion switches bloom off entirely — the setting already promises that flashing is calmed.
+ */
+const BLOOM = { strength: 0.32, radius: 0.45, threshold: 0.9 };
+
+/**
  * The renderer facade. It owns the GPU resources and every per-frame visual subsystem, and it
  * is the only render-side module allowed to read the race runtime — the simulation is always
  * the authority, this class reads it and never writes to it.
@@ -163,10 +171,10 @@ export class RendererManager {
     this.environment.setBiome(biome, tier);
     this.post?.dispose();
     this.post = new PostFX(this.renderer, this.scene, this.rig.camera, {
-      bloom: budget.bloom,
-      strength: 0.78,
-      radius: 0.6,
-      threshold: 0.58,
+      bloom: budget.bloom && !this.options.reducedMotion,
+      strength: BLOOM.strength,
+      radius: BLOOM.radius,
+      threshold: BLOOM.threshold,
       aberration: budget.aberration,
       resolutionScale: 1,
     });
@@ -271,7 +279,7 @@ export class RendererManager {
     const dpr = Math.min(window.devicePixelRatio || 1, budget.dprCap);
     this.renderer.setPixelRatio(dpr * budget.renderScale);
     this.particles?.setSizeScale(budget.tier === 'low' ? 0.85 : 1);
-    this.post?.setBloom(budget.bloom, 0.78, 0.6, 0.58);
+    this.post?.setBloom(budget.bloom && !this.options.reducedMotion, BLOOM.strength, BLOOM.radius, BLOOM.threshold);
     this.post?.setAberration(budget.aberration);
     this.post?.setQualityGrain(budget.tier === 'low' ? 0.012 : 0.024, 0.42);
     for (const t of this.trails) t.setBudget(budget.trailSegments);
@@ -547,6 +555,9 @@ export class RendererManager {
   setMotionSettings(reducedMotion: boolean, shakeEnabled: boolean): void {
     this.options.reducedMotion = reducedMotion;
     this.options.shakeEnabled = shakeEnabled;
+    // Bloom is a flash source by definition; honour the reduced-motion promise live.
+    const budget = this.options.quality.profile;
+    this.post?.setBloom(budget.bloom && !reducedMotion, BLOOM.strength, BLOOM.radius, BLOOM.threshold);
   }
 
   /** Frees track-bound resources without tearing down the renderer itself. */
