@@ -1,4 +1,4 @@
-import { MathUtils, Object3D, PerspectiveCamera, Quaternion, Vector3 } from 'three';
+import { MathUtils, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { CAMERA, LANE } from '../data/config.ts';
 import type { QualityTier } from '../data/types.ts';
 import { clamp, clamp01, damp } from '../utils/math.ts';
@@ -49,9 +49,6 @@ const SHAKE_LAYERS = 3;
  */
 export class CameraRig {
   readonly camera: PerspectiveCamera;
-  /** Anchor the ship is drawn at so the renderer and camera never disagree. */
-  readonly shipAnchor = new Object3D();
-  readonly targetAnchor = new Object3D();
 
   private readonly frame = createFrame();
   private readonly pos = new Vector3();
@@ -74,7 +71,6 @@ export class CameraRig {
 
   constructor(aspect: number) {
     this.camera = new PerspectiveCamera(CAMERA.fovBase, aspect, 0.35, LANE.fogFar * 2.2);
-    this.shipAnchor.add(this.targetAnchor);
   }
 
   get viewDistance(): number {
@@ -95,7 +91,6 @@ export class CameraRig {
     this.camera.up.copy(this.up);
     this.camera.lookAt(this.look);
     this.camera.updateMatrixWorld(true);
-    this.shipAnchor.position.copy(this.pos);
   }
 
   update(dt: number, path: LanePath, input: CameraInput, quality: QualityTier, reducedMotion: boolean, shakeEnabled: boolean): void {
@@ -149,12 +144,6 @@ export class CameraRig {
     this.camera.lookAt(this.look);
     this.camera.rotateZ(this.rotShake.z + this.yawVis * 0.2);
     this.camera.rotateX(this.rotShake.x);
-
-    // The renderer parents the ship to this anchor so exhaust particles and the hull share
-    // exactly the transform the camera is looking at.
-    this.shipAnchor.position.copy(this.camera.position);
-    this.shipAnchor.quaternion.copy(this.camera.quaternion);
-    this.shipAnchor.updateMatrixWorld(true);
   }
 
   /** Menu / garage orbit, independent of lane state. */
@@ -172,11 +161,25 @@ export class CameraRig {
     const side = input.u * CAMERA.lateralFollow;
     const lift = CAMERA.height * weight + input.h * 0.28;
 
-    this.pos.copy(path.pointTo(back, side, lift, this.pos, this.frame));
+    // The player's own frame belongs to station `s` only. The camera sits ~15 m behind and
+    // aims ~60 m ahead, so those points must resolve on the frames of their own stations —
+    // reusing `this.frame` there stacks the whole rig on top of the ship and the view axis
+    // degenerates to "straight down over our own tail".
+    if (back >= 0) {
+      path.pointTo(back, side, lift, this.pos);
+    } else {
+      // Before the start line there is no corridor to stand in, so extrapolate along the
+      // entry tangent (the opening rows are straight) — the grid shot keeps the ship framed
+      // instead of the camera clamping on top of it.
+      this.pos.set(this.frame.px, this.frame.py, this.frame.pz);
+      this.pos.addScaledVector(this.fwd.set(this.frame.dx, this.frame.dy, this.frame.dz), back);
+      this.pos.addScaledVector(this.right.set(this.frame.rx, this.frame.ry, this.frame.rz), side);
+      this.pos.addScaledVector(this.up.set(this.frame.ux, this.frame.uy, this.frame.uz), lift);
+    }
     // Lead the aim point down the corridor and into the curve, so the visible road is always
     // the road the player is about to fly.
     const ahead = CAMERA.lookAhead + input.speed * 0.16 + input.warp * 60;
-    this.look.copy(path.pointTo(s + ahead, input.u * 0.42, input.h + 1.4, this.look, this.frame));
+    this.look.copy(path.pointTo(s + ahead, input.u * 0.42, input.h + 1.4, this.look));
 
     this.up.set(this.frame.ux, this.frame.uy, this.frame.uz);
     this.right.set(this.frame.rx, this.frame.ry, this.frame.rz);
@@ -233,7 +236,5 @@ export class CameraRig {
 
   dispose(): void {
     this.camera.clear();
-    this.shipAnchor.clear();
-    this.targetAnchor.clear();
   }
 }

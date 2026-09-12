@@ -1,5 +1,7 @@
+import { Vector3 } from 'three';
 import type { App } from '../main.ts';
 import type { GamePhase } from '../data/types.ts';
+import { createFrame } from '../game/LanePath.ts';
 
 /**
  * Headless verification harness, armed by `?selftest`.
@@ -14,6 +16,28 @@ export interface Probe {
   mean: number;
   max: number;
   lit: number;
+}
+
+/**
+ * Chase-camera invariant, shared by the full self-test and the `?autorace` dev hook:
+ * the rig must trail the ship down the lane with the hull inside the view, never sit on
+ * top of it. The historic bug reused the player's own frame for the back/look stations,
+ * collapsing the camera onto the ship with a degenerate downward aim.
+ */
+export function cameraAimProbe(app: App): { ok: boolean; detail: string } {
+  const rt = app.runtime;
+  if (!rt) return { ok: false, detail: 'no runtime' };
+  const p = rt.player;
+  const cam = app.renderer.rig.camera;
+  const shipWorld = rt.path.pointTo(p.s, p.u, p.h, new Vector3());
+  const toShip = shipWorld.clone().sub(cam.position);
+  const aimDist = toShip.length();
+  const f = rt.path.frameAt(p.s, createFrame());
+  const along = toShip.dot(new Vector3(f.dx, f.dy, f.dz));
+  const ndc = shipWorld.clone().project(cam);
+  const ok = aimDist > 8 && aimDist < 30 && along > 8
+    && ndc.z > 0 && ndc.z < 1 && Math.abs(ndc.x) < 0.75 && ndc.y < 0.6 && ndc.y > -0.95;
+  return { ok, detail: `dist=${aimDist.toFixed(1)} along=${along.toFixed(1)} ndc=(${ndc.x.toFixed(2)},${ndc.y.toFixed(2)},${ndc.z.toFixed(2)})` };
 }
 
 const SCREENS: GamePhase[] = ['main_menu', 'garage', 'settings', 'howto', 'briefing'];
@@ -90,6 +114,16 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
 
     const rt = app.runtime;
     if (!rt) throw new Error('runtime vanished during race');
+
+    // The chase camera must actually trail the ship and keep it framed. The historic failure
+    // was the rig reusing the player's own frame for the back/look stations: the camera then
+    // sat on top of the hull staring at its tail, which a framebuffer probe alone can't see.
+    {
+      const aim = cameraAimProbe(app);
+      steps.push(`camera aim ${aim.detail} ok=${aim.ok}`);
+      if (!aim.ok) errors.push(`chase camera is not following the ship (${aim.detail})`);
+    }
+
     const start = { s: rt.player.s, score: rt.hud.score };
     const sigA = entitySignature(rt.entities);
     steps.push(`lane signature at start=${sigA}`);
@@ -294,6 +328,9 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
 
   app.pixelProbe = false;
   const text = JSON.stringify(report, null, 1);
+  // Also mirror the report into the console: a headless run captures console lines reliably,
+  // while the DOM dump depends on the virtual-time budget happening to expire at the end.
+  console.log(`[selftest-result] ${text.replace(/\s+/g, ' ')}`);
   document.title = report.ok ? 'SELFTEST OK' : 'SELFTEST FAIL';
   const pre = document.createElement('pre');
   pre.id = 'selftest-result';

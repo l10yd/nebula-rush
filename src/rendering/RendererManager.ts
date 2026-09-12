@@ -362,12 +362,12 @@ export class RendererManager {
     );
     RIGHT.set(this.frame.rx, this.frame.ry, this.frame.rz);
     UP.set(this.frame.ux, this.frame.uy, this.frame.uz);
-    FWD.set(-this.frame.dx, -this.frame.dy, -this.frame.dz);
+    FWD.set(this.frame.dx, this.frame.dy, this.frame.dz);
     if (this.ship) {
       const body = this.ship.root;
       body.position.copy(path.pointTo(s, u, h, VEC, this.frame));
       body.quaternion.copy(QUAT.setFromRotationMatrix(BASIS.makeBasis(RIGHT, UP, FWD)));
-      body.rotateZ(Math.sin(s * 0.0042) * 0.12);
+      body.rotateY(-Math.sin(s * 0.0042) * 0.12);
       this.ship.setBank(Math.sin(s * 0.0042) * 0.25, 0);
       this.ship.update(dt, {
         boost: 0.2,
@@ -432,9 +432,12 @@ export class RendererManager {
       body.position.copy(world);
       RIGHT.set(this.frame.rx, this.frame.ry, this.frame.rz);
       UP.set(this.frame.ux, this.frame.uy, this.frame.uz);
-      FWD.set(-this.frame.dx, -this.frame.dy, -this.frame.dz);
+      // (right, up, dir) is the lane's own rotation basis; the hull model has its nose along
+      // local +z. Negating the third column mirrors the matrix (det -1), which silently
+      // collapses the derived quaternion into a degenerate one.
+      FWD.set(this.frame.dx, this.frame.dy, this.frame.dz);
       body.quaternion.copy(QUAT.setFromRotationMatrix(BASIS.makeBasis(RIGHT, UP, FWD)));
-      body.rotateZ(p.yawVis);
+      body.rotateY(-p.yawVis);
       body.rotateX(p.pitchVis);
       this.ship.setBank(p.bank, p.pitchVis * 0.4);
       // Owned cosmetics only: both are particle dressing, never a gameplay difference.

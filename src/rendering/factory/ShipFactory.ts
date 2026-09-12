@@ -252,6 +252,11 @@ export function createShipVisual(ship: ShipTuning, trail: TrailTuning, cosmetics
 
   const root = new Group();
   root.name = `ship-${ship.id}`;
+  // All visible parts live under a dressing group: the chase renderer writes root.position/
+  // quaternion from the corridor frame every frame, and the animated trim below (hover bob,
+  // brake push, bank blend) must never fight that for the same transform.
+  const dressing = new Group();
+  root.add(dressing);
   const hull = hullMaterial(ship.hull);
   const darkHull = hullMaterial('#2a3040');
   const accent = emissiveMaterial(ship.accent, 1.9);
@@ -262,12 +267,12 @@ export function createShipVisual(ship: ShipTuning, trail: TrailTuning, cosmetics
 
   const body = new Mesh(cached('body-' + ship.id, () => fuselageGeometry(length, beam, spine, detail)), hull);
   disposables.add(body.geometry);
-  root.add(body);
+  dressing.add(body);
 
   const wing = new Mesh(cached('wing-' + ship.id, () => wingGeometry(span, length * 0.42, length * 0.16, length * 0.3, spine * 0.9, detail)), hull);
   wing.position.set(0, -spine * 0.25, -length * 0.02);
   disposables.add(wing.geometry);
-  root.add(wing);
+  dressing.add(wing);
 
   // Fins are distributed around the tail: the fin count is the clearest silhouette tell.
   const fins = Math.max(2, ship.profile.fins);
@@ -279,20 +284,20 @@ export function createShipVisual(ship: ShipTuning, trail: TrailTuning, cosmetics
     fin.position.set(0, 0, -length * 0.3);
     fin.rotation.set(0, 0, a);
     fin.scale.setScalar(0.9);
-    root.add(fin);
+    dressing.add(fin);
   }
 
   const canopy = new Mesh(cached('canopy-' + ship.id, () => canopyGeometry(beam * 0.78, length * 0.26, detail)), glassMaterial(ship.profile.glass));
   canopy.position.set(0, spine * 0.72, length * 0.14);
   disposables.add(canopy.geometry);
-  root.add(canopy);
+  dressing.add(canopy);
 
   // Readability spine: a thin emissive line down the dorsal centre, always visible from chase.
   const spineGeo = cached('spine-' + ship.id, () => fuselageGeometry(length * 0.62, 0.045, 0.045, 0));
   disposables.add(spineGeo);
   const spineStrip = new Mesh(spineGeo, accent);
   spineStrip.position.set(0, spine * 0.92, -length * 0.04);
-  root.add(spineStrip);
+  dressing.add(spineStrip);
 
   const nacRadius = beam * 0.34 * engineScale;
   const nacLength = length * 0.42 * engineScale;
@@ -307,23 +312,23 @@ export function createShipVisual(ship: ShipTuning, trail: TrailTuning, cosmetics
   for (const side of [-1, 1]) {
     const nac = new Mesh(nacGeo, hull);
     nac.position.set(side * spacing, -spine * 0.15, -length * 0.16);
-    root.add(nac);
+    dressing.add(nac);
 
     const ring = new Mesh(ringGeo, halo);
     ring.position.set(side * spacing, -spine * 0.15, -length * 0.16 - nacLength * 0.5);
-    root.add(ring);
+    dressing.add(ring);
     exhaustRings.push(ring);
 
     const inner = new Mesh(ringGeo, core);
     inner.scale.setScalar(0.62);
     inner.position.copy(ring.position);
     inner.position.z -= 0.02;
-    root.add(inner);
+    dressing.add(inner);
     exhaustRings.push(inner);
 
     const anchor = new Object3D();
     anchor.position.set(side * spacing, -spine * 0.15, ring.position.z - nacRadius * 0.4);
-    root.add(anchor);
+    dressing.add(anchor);
     engineAnchors.push(anchor);
   }
 
@@ -334,13 +339,13 @@ export function createShipVisual(ship: ShipTuning, trail: TrailTuning, cosmetics
     for (const side of [-1, 1]) {
       const tip = new Mesh(tipGeo, accent);
       tip.position.set(side * span, -spine * 0.25, -length * 0.02 + length * 0.28);
-      root.add(tip);
+      dressing.add(tip);
     }
   }
 
   const noseAnchor = new Object3D();
   noseAnchor.position.set(0, 0, length * 0.55);
-  root.add(noseAnchor);
+  dressing.add(noseAnchor);
 
   const shieldGeo = cached('shield', () => new SphereGeometry(1, 20, 14));
   disposables.add(shieldGeo);
@@ -356,7 +361,7 @@ export function createShipVisual(ship: ShipTuning, trail: TrailTuning, cosmetics
   const shieldMesh = new Mesh(shieldGeo, shieldMat);
   shieldMesh.scale.setScalar(length * 0.46);
   shieldMesh.visible = false;
-  root.add(shieldMesh);
+  dressing.add(shieldMesh);
 
   const tintedMaterials = [halo, core];
   let shieldLevel = 0;
@@ -373,11 +378,11 @@ export function createShipVisual(ship: ShipTuning, trail: TrailTuning, cosmetics
     },
     update(dt, state) {
       const k = Math.min(1, dt * 9);
-      root.rotation.z += (targetRoll - root.rotation.z) * k;
-      root.rotation.x += (targetPitch - root.rotation.x) * Math.min(1, dt * 7);
+      dressing.rotation.z += (targetRoll - dressing.rotation.z) * k;
+      dressing.rotation.x += (targetPitch - dressing.rotation.x) * Math.min(1, dt * 7);
       // Hover bob: tiny, high frequency, sells mass without ever hiding the silhouette.
-      root.position.y = Math.sin(state.time * 2.2) * 0.03 + Math.sin(state.time * 5.7) * 0.012;
-      root.position.z = -state.brake * 0.12 + state.drift * 0.05;
+      dressing.position.y = Math.sin(state.time * 2.2) * 0.03 + Math.sin(state.time * 5.7) * 0.012;
+      dressing.position.z = -state.brake * 0.12 + state.drift * 0.05;
 
       const flare = 0.5 + state.throttle * 0.5 + state.boost * 1.5 + state.overdrive * 0.7;
       const pulse = 1 + Math.sin(state.time * 26) * 0.05 * (0.35 + state.boost);

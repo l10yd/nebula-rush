@@ -35,7 +35,7 @@ import type { RaceRequest, ScreenHost, TrackSummary } from './ui/Screens.ts';
 import { UIManager } from './ui/UIManager.ts';
 import { el } from './ui/dom.ts';
 import { TiltSteering } from './input/TiltSteering.ts';
-import { runSelfTest } from './core/SelfTest.ts';
+import { runSelfTest, cameraAimProbe } from './core/SelfTest.ts';
 
 /** Context handed to the state machine. One instance for the lifetime of the page. */
 interface AppContext {
@@ -810,6 +810,11 @@ export class App implements ScreenHost {
     return this.probeResult;
   }
 
+  /** Dev-hook: whether the loop's simulation is currently frozen (render-only). */
+  get loopPaused(): boolean {
+    return this.loop?.isPaused ?? false;
+  }
+
   /**
    * Nine framebuffer reads across the visible band. Only ever runs while the self-test is
    * armed, so a normal frame never pays for a synchronous GPU read.
@@ -920,7 +925,33 @@ async function main(): Promise<void> {
     const app = new App(root);
     window.__nebula = app;
     await app.boot();
-    if (new URLSearchParams(window.location.search).has('selftest')) void runSelfTest(app);
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('selftest')) void runSelfTest(app);
+    // Dev-only: jump straight into a seeded race so a headless browser can screenshot the
+    // first seconds of play without scripting clicks (`?autorace[=<seed>]`). The title tracks
+    // the phase, and once the ship is up to speed a camera-aim probe result is written to the
+    // DOM, so a `--dump-dom` run can verify the chase view programmatically.
+    if (DEBUG.enabled && params.has('autorace')) {
+      window.setTimeout(() => app.startRace({
+        mode: 'seed',
+        difficulty: 'pilot',
+        biome: 'deep_space',
+        seedText: params.get('autorace') || 'AUTORACE-1',
+      }), 800);
+      const check = window.setInterval(() => {
+        const rt = app.runtime;
+        document.title = `autorace:${app.phase}:s=${Math.round(rt?.player.s ?? 0)}:cd=${(rt?.countdown ?? -1).toFixed(1)}:pause=${app.loopPaused}:hidden=${document.hidden}`;
+        if (app.phase === 'racing' && (app.runtime?.hud.speed ?? 0) > 40) {
+          window.clearInterval(check);
+          const aim = cameraAimProbe(app);
+          document.title = `autorace:${aim.ok ? 'OK' : 'FAIL'}`;
+          const pre = document.createElement('pre');
+          pre.id = 'camcheck-result';
+          pre.textContent = `${aim.ok ? 'CAMCHECK OK' : 'CAMCHECK FAIL'} ${aim.detail}`;
+          document.body.appendChild(pre);
+        }
+      }, 250);
+    }
   } catch (error) {
     showError(error);
   }

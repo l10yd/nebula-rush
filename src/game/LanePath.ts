@@ -186,8 +186,14 @@ export class LanePath {
     return out;
   }
 
-  /** Converts lane-local (s,u,h) to world space, writing into a 3-number array. */
-  pointTo(s: number, u: number, h: number, out: { x: number; y: number; z: number }, frame?: LaneFrame): { x: number; y: number; z: number } {
+  /**
+   * Converts lane-local (s,u,h) to world space, writing into a 3-number array.
+   * `frame` is a pure cache for the frame **at exactly this `s`** — when given, it is used as
+   * the origin/basis verbatim and `s` is not sampled. Passing a frame from another station
+   * silently ignores the `s` argument; callers that convert points at a different station
+   * (camera back/look-ahead) must omit `frame` and let it resolve per point.
+   */
+  pointTo<T extends { x: number; y: number; z: number }>(s: number, u: number, h: number, out: T, frame?: LaneFrame): T {
     const f = frame ?? this.frameAt(s, scratch);
     const hh = Math.max(0.001, h - 0);
     out.x = f.px + f.rx * u + f.ux * hh;
@@ -197,13 +203,13 @@ export class LanePath {
   }
 
   /** Unit basis vectors of the lane frame at `s` (allocation-free). */
-  rightAt(s: number, out: { x: number; y: number; z: number }, frame?: LaneFrame): { x: number; y: number; z: number } {
+  rightAt<T extends { x: number; y: number; z: number }>(s: number, out: T, frame?: LaneFrame): T {
     const f = frame ?? this.frameAt(s, scratch);
     out.x = f.rx; out.y = f.ry; out.z = f.rz;
     return out;
   }
 
-  upAt(s: number, out: { x: number; y: number; z: number }, frame?: LaneFrame): { x: number; y: number; z: number } {
+  upAt<T extends { x: number; y: number; z: number }>(s: number, out: T, frame?: LaneFrame): T {
     const f = frame ?? this.frameAt(s, scratch);
     out.x = f.ux; out.y = f.uy; out.z = f.uz;
     return out;
