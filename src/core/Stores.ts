@@ -1,5 +1,5 @@
 import { i18n } from '../data/i18n.ts';
-import type { BiomeId, DifficultyId, InputAction, Progress, QualityTier, Settings, ShipId, TrailId } from '../data/types.ts';
+import type { BiomeId, DifficultyId, InputAction, Progress, Settings, ShipId, TrailId } from '../data/types.ts';
 import type { SaveSystem } from './SaveSystem.ts';
 import { EventBus } from './EventBus.ts';
 
@@ -183,7 +183,4 @@ export class ProgressStore {
   }
 
   /** Auto-resolved quality when the user leaves it on adaptive. */
-  effectiveQuality(requested: QualityTier): QualityTier {
-    return requested;
-  }
 }

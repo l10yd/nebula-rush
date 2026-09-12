@@ -53,7 +53,8 @@ export function defaultSettings(caps?: Capabilities): Settings {
   };
 }
 
-function defaultQualityFor(caps: Capabilities): QualityTier {
+/** The tier this class of hardware is estimated to sustain, used as the automatic ceiling. */
+export function defaultQualityFor(caps: Capabilities): QualityTier {
   if (caps.tier === 'high') return caps.devicePixelRatio > 2.2 ? 'high' : 'ultra';
   if (caps.tier === 'medium') return 'high';
   return 'low';

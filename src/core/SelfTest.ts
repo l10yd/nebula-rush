@@ -69,6 +69,7 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     }
 
 
+    const creditsBefore = app.progress.credits;
     app.startRace({ mode: 'seed', difficulty: 'pilot', biome: 'collapse_field', seedText: 'SELFTEST-2024' });
     await waitFor(() => app.phase === 'countdown' || app.phase === 'racing', 25000, 'start race');
     steps.push(`started phase=${app.phase}`);
@@ -140,6 +141,10 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
       await waitFor(() => app.phase === 'results', 8000, 'results panel').catch(() => undefined);
       const result = document.querySelector('[data-screen="results"]')?.classList.contains('is-active');
       steps.push(`ended phase=${app.phase} resultsShown=${!!result}`);
+      const gained = app.progress.credits - creditsBefore;
+      steps.push(`credits earned=${gained}`);
+      if (gained <= 0) errors.push('finishing a race credited no currency');
+      if (!app.progress.value.firstRaceDone) errors.push('the tutorial flag was never set');
     } else {
       steps.push(`ended=false s=${(app.runtime?.player.s ?? 0).toFixed(0)}`);
     }

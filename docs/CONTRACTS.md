@@ -157,3 +157,48 @@ All textures must be power-of-two, tileable where stated, and use correct colour
 
 Written **later** by the UI owner's brief; see `docs/UI-CONTRACT.md` (created when the DOM
 modules exist). Ignore this section until that file exists.
+
+## E) Verification protocol
+
+The game is only considered working when both of these are green. They cover different halves:
+the Node tests own the simulation, the browser harness owns everything that needs a GPU and a
+DOM.
+
+### 1. Simulation (no browser required)
+
+```bash
+pnpm test         # node --experimental-transform-types --test "tests/*.test.ts"
+```
+
+Rules the tests enforce: a lane generated from the same seed is byte-identical, every generated
+lane has a passable line, par time stays in band, the collapse director never seals the last
+route, the difficulty ladder changes the lane and not only the damage, and a fully autopiloted
+race finishes with a finite, non-zero score. Plus save robustness: garbage, hostile values and a
+storage that refuses writes must all yield a playable session.
+
+### 2. Real browser (`?selftest`)
+
+```bash
+pnpm build && pnpm preview
+chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader \
+       --virtual-time-budget=900000 --window-size=480,270 --dump-dom "http://localhost:4178/?selftest"
+```
+
+The harness walks the phase graph and prints a JSON report into `<pre id="selftest-result">`.
+It asserts, among other things:
+
+- each screen is actually shown, and its framebuffer is not black (nine `readPixels` samples);
+- no untranslated i18n key is visible in either locale, across all five menu screens;
+- a race starts, the ship advances, scores and chains, and props reach the GPU;
+- pause/resume, end-of-race and the results screen all work;
+- the same seed rebuilds an identical entity layout, and the daily lane differs from it;
+- the daily lane announces itself in the HUD;
+- accessibility settings change the applied classes and the UI scale variable;
+- the top quality tier renders on request.
+
+Console output from the page must stay empty. A `GL Driver Message ... GPU stall` line is the
+software rasteriser reacting to the harness' own pixel reads and is expected only in headless
+runs.
+
+Because a headless SwiftShader frame can cost a tenth of a second, timing assertions in the
+harness are expressed in **rendered frames**, never in wall-clock seconds.

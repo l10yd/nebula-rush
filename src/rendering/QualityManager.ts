@@ -66,6 +66,8 @@ function budgetFor(tier: QualityTier): QualityBudget {
 export class QualityManager {
   private tier: QualityTier;
   private auto: boolean;
+  /** Automatic mode never climbs above this. */
+  private ceiling: QualityTier;
   private budget: QualityBudget;
   private badWindows = 0;
   private goodWindows = 0;
@@ -74,13 +76,23 @@ export class QualityManager {
   private changeHandler: ((tier: QualityTier, reason: 'auto' | 'manual') => void) | null = null;
 
   constructor(settings: SettingsStore, ceiling: QualityTier = 'ultra') {
+    this.ceiling = ceiling;
     this.auto = settings.get('autoQuality');
-    this.tier = clampToCeiling(settings.get('quality'), ceiling);
+    const requested = settings.get('quality');
+    // A tier the player picked by hand is honoured even above what this GPU is estimated to
+    // sustain; the device ceiling governs only the automatic ladder, which must never climb
+    // into territory the hardware cannot hold.
+    this.tier = this.auto ? clampToCeiling(requested, ceiling) : requested;
     this.budget = budgetFor(this.tier);
     this.unsubscribe = settings.onChange(() => {
       const next = settings.get('quality');
-      this.auto = settings.get('autoQuality');
-      if (!this.auto) this.apply(clampToCeiling(next, ceiling), 'manual');
+      const auto = settings.get('autoQuality');
+      if (auto !== this.auto) {
+        this.auto = auto;
+        this.badWindows = 0;
+        this.goodWindows = 0;
+      }
+      this.apply(auto ? clampToCeiling(next, this.ceiling) : next, auto ? 'auto' : 'manual');
     });
   }
 
@@ -106,9 +118,13 @@ export class QualityManager {
     this.goodWindows = 0;
   }
 
-  /** Never render above what the GPU can sustain, without overriding an explicit choice. */
+  /**
+   * Move the automatic ceiling. Lowering it also drags the current tier down with it, which is
+   * the case that actually matters: a device found to be slower than estimated.
+   */
   setCeiling(ceiling: QualityTier): void {
-    if (LADDER.indexOf(this.tier) < LADDER.indexOf(ceiling)) this.apply(ceiling, 'auto');
+    this.ceiling = ceiling;
+    if (this.auto) this.apply(clampToCeiling(this.tier, ceiling), 'auto');
   }
 
   /**
@@ -131,7 +147,10 @@ export class QualityManager {
       return true;
     }
     if (this.goodWindows >= upNeeded && index > 0) {
-      this.apply(LADDER[index - 1], 'auto');
+      const target = LADDER[index - 1];
+      // Climb only inside what the hardware was measured to sustain.
+      if (LADDER.indexOf(target) < LADDER.indexOf(this.ceiling)) return false;
+      this.apply(target, 'auto');
       this.armCooldown(nowSeconds, 2);
       return true;
     }

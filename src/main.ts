@@ -17,7 +17,7 @@ import type { StringKey } from './data/i18n.ts';
 import type { BiomeId, DifficultyId, GamePhase, InputAction, RaceMode, RaceResult } from './data/types.ts';
 import { SafeStorage, detectCapabilities, onResize, onVisibility, requestFullscreen } from './core/Platform.ts';
 import type { Capabilities } from './core/Platform.ts';
-import { SaveSystem } from './core/SaveSystem.ts';
+import { SaveSystem, defaultQualityFor } from './core/SaveSystem.ts';
 import { ProgressStore, SettingsStore } from './core/Stores.ts';
 import { StateMachine } from './core/StateMachine.ts';
 import { GameLoop } from './core/GameLoop.ts';
@@ -86,7 +86,7 @@ export class App implements ScreenHost {
     this.input = new InputManager(canvas);
     this.input.setBindings(this.settings.value.keybinds);
     this.input.attach();
-    this.quality = new QualityManager(this.settings, this.progress.effectiveQuality(this.settings.get('quality')));
+    this.quality = new QualityManager(this.settings, defaultQualityFor(this.caps));
     this.quality.onChange(() => this.renderer?.applyQuality());
     this.renderer = new RendererManager({
       canvas,
@@ -227,7 +227,6 @@ export class App implements ScreenHost {
     this.syncTilt(s.tiltSteering);
     this.ui.applySettings();
     this.renderer.resize(window.innerWidth, window.innerHeight);
-    if (s.quality !== this.quality.current && !s.autoQuality) this.quality.setCeiling(this.progress.effectiveQuality(s.quality));
   }
 
   toggleFullscreen(): void {

@@ -123,7 +123,8 @@ export function makeSeed(label: string, salt: number): Seed {
 
 /** Daily star lane seed: identical for every player on a given UTC day. */
 export function dailySeed(date = new Date()): { seed: Seed; dayKey: string } {
-  const key = `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const key = `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
   const dayIndex = Math.floor(date.getTime() / 86400000);
   return { seed: makeSeed('DAILY', dayIndex), dayKey: key };
 }
