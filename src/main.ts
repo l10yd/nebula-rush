@@ -14,7 +14,7 @@ import {
 } from './data/config.ts';
 import { i18n } from './data/i18n.ts';
 import type { StringKey } from './data/i18n.ts';
-import type { BiomeId, DifficultyId, GamePhase, InputAction, RaceMode, RaceResult } from './data/types.ts';
+import type { BiomeId, DifficultyId, GamePhase, InputAction, QualityTier, RaceMode, RaceResult } from './data/types.ts';
 import { SafeStorage, detectCapabilities, onResize, onVisibility, requestFullscreen } from './core/Platform.ts';
 import type { Capabilities } from './core/Platform.ts';
 import { SaveSystem, defaultQualityFor } from './core/SaveSystem.ts';
@@ -95,7 +95,11 @@ export class App implements ScreenHost {
       shakeEnabled: this.settings.get('screenShake'),
     });
     this.ui = new UIManager({ root, canvas, host: this, settings: this.settings, progress: this.progress, input: this.input, debugSource: DEBUG.enabled ? () => this.debugSource() : undefined });
-    this.quality.onChange(() => this.ui.applySettings());
+    this.quality.onChange(() => {
+      this.ui.applySettings();
+      // Keep an open settings screen honest when the ladder moves underneath it.
+      if (this.sm.phase === 'settings' || this.sm.phase === 'garage') this.ui.refresh();
+    });
     this.registerPhases();
     this.wireLifecycle();
     this.sm.onTransition((from, to) => {
@@ -137,8 +141,9 @@ export class App implements ScreenHost {
       if (hidden) {
         this.save.flush();
         // Freezing the loop is not enough: without this the player comes back mid-flight with
-        // no chance to read the state they left.
-        if (this.sm.phase === 'racing' || this.sm.phase === 'countdown') void this.sm.go('paused');
+        // no chance to read the state they left. The countdown is exempt - it has nothing to
+        // lose, and pausing there strands someone who never saw the race begin.
+        if (this.sm.phase === 'racing') void this.sm.go('paused');
         this.loop?.setPaused(true);
       } else {
         this.loop?.setPaused(false);
@@ -290,6 +295,10 @@ export class App implements ScreenHost {
     if (!this.tilt.active) void this.tilt.enable().then((granted) => {
       if (!granted) this.ui.toast('toast.tiltDenied');
     });
+  }
+
+  qualityTier(): QualityTier {
+    return this.quality.current;
   }
 
   deviceSummary(): string {

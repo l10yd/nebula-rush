@@ -148,9 +148,14 @@ export class UIManager {
     this.hud.root.classList.toggle('is-frame-aegis', this.ports.progress.hasCosmetic('hud_frame'));
   }
 
+  /** Rebuilds the visible screen, e.g. after the tier or locale changed underneath it. */
+  refresh(): void {
+    this.current?.show();
+  }
+
   refreshLocale(): void {
     this.hud.refreshLocale();
-    this.current?.show();
+    this.refresh();
   }
 
   update(dt: number): void {

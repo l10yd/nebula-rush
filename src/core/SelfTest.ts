@@ -71,10 +71,18 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
 
     const creditsBefore = app.progress.credits;
     app.startRace({ mode: 'seed', difficulty: 'pilot', biome: 'collapse_field', seedText: 'SELFTEST-2024' });
-    await waitFor(() => app.phase === 'countdown' || app.phase === 'racing', 25000, 'start race');
+    // Generous on purpose: the first race of a session also pays for shader compilation, which
+    // on a software rasteriser is tens of seconds, not frames.
+    await waitFor(() => app.phase === 'countdown' || app.phase === 'racing', 180000, 'start race').catch((e: Error) => {
+      steps.push(`stuck phase=${app.phase} status=${app.runtime?.status ?? 'none'} fps=${app.fps.toFixed(1)} hasRuntime=${!!app.runtime}`);
+      throw e;
+    });
     steps.push(`started phase=${app.phase}`);
 
-    await waitFor(() => app.phase === 'racing', 90000, 'countdown to racing');
+    await waitFor(() => app.phase === 'racing', 200000, 'countdown to racing').catch((e: Error) => {
+      steps.push(`stuck before racing phase=${app.phase} status=${app.runtime?.status ?? 'none'} fps=${app.fps.toFixed(1)}`);
+      throw e;
+    });
     await waitFor(() => {
       const rt = app.runtime;
       return !!rt && rt.hud.speed > 40;
@@ -97,7 +105,18 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
       shots.push(fmt(sample));
       if (sample.lit < 0.1) dark++;
     }
-    await waitFor(() => app.probeTick > tickStart + 90, 120000, 'ninety rendered frames');
+    // Warnings are transient by design, so watch the whole frame window rather than sampling
+    // once: the HUD strip must mirror the simulation's list exactly whenever any of them is up.
+    let maxWarnings = 0;
+    let mismatched = 0;
+    while (app.probeTick < tickStart + 90 && app.phase === 'racing') {
+      const live = rt.warnings.length;
+      if (live > maxWarnings) maxWarnings = live;
+      if (live > 0 && document.querySelectorAll('.nr-warning').length !== live) mismatched++;
+      await sleep(40);
+    }
+    steps.push(`warnings peak=${maxWarnings} hudMismatch=${mismatched}`);
+    if (mismatched > 0) errors.push(`the HUD warning strip disagreed with the simulation ${mismatched}x`);
     const fps = app.fps;
     steps.push(`render fps=${fps.toFixed(1)}`);
     const st = rt.spectacle.state;
@@ -169,6 +188,30 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     app.settings.patch({ reducedMotion: false, screenShake: true, colorSafe: false, highContrastHud: false, uiScale: 1 });
     app.applySettings();
 
+    /* ---------------------------------- a quality preset that admits what it is doing */
+    app.goto('settings');
+    await waitFor(() => app.phase === 'settings', 8000, 'settings for the tier check').catch(() => undefined);
+    app.settings.patch({ autoQuality: true, quality: 'ultra' });
+    app.applySettings();
+    await sleep(150);
+    const shown = app.qualityTier();
+    // The preset row lives on one tab, so walk the tabs rather than assuming which is open.
+    const tabs = Array.from(document.querySelectorAll<HTMLElement>('.nr-tabs button'));
+    let admits = false;
+    const tabLabels: string[] = [];
+    for (const tab of tabs) {
+      tab.click();
+      await sleep(60);
+      tabLabels.push((tab.textContent ?? '').trim().slice(0, 12));
+      if (document.querySelector('.nr-screen.is-active .nr-note')) admits = true;
+    }
+    steps.push(`auto clamp requested=ultra running=${shown} tabs=${tabLabels.join('|')} noteShown=${admits}`);
+    if (shown !== 'ultra' && !admits) {
+      errors.push('automatic mode overrode the preset without saying so on the settings screen');
+    }
+    app.settings.patch({ autoQuality: false, quality: 'low' });
+    app.applySettings();
+
     /* --------------------------------------- the same seed must rebuild the same lane */
     app.goto('main_menu');
     await waitFor(() => app.phase === 'main_menu', 6000, 'menu after results');
@@ -180,7 +223,13 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     steps.push(`briefing reachable=${app.phase}`);
 
     app.startRace({ mode: 'seed', difficulty: 'pilot', biome: 'collapse_field', seedText: 'SELFTEST-2024' });
-    await waitFor(() => app.phase === 'racing', 200000, 'second race with the same seed');
+    try {
+      await waitFor(() => app.phase === 'racing', 200000, 'second race with the same seed');
+    } catch (e) {
+      // Record what the machine was actually doing, otherwise the failure is just a timeout.
+      steps.push(`stuck phase=${app.phase} status=${app.runtime?.status ?? 'none'} fps=${app.fps.toFixed(1)} hasRuntime=${!!app.runtime}`);
+      throw e;
+    }
     const rt2 = app.runtime;
     if (!rt2) throw new Error('runtime missing on the second race');
     const sigB = entitySignature(rt2.entities);
@@ -205,11 +254,10 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
     await waitFor(() => app.phase === 'main_menu', 8000, 'menu after daily check').catch(() => undefined);
 
     /* --------------------------------------------------------- the top quality tier */
-    // This machine reports as a low-end device, so the device ceiling deliberately keeps the
-    // tier down. Raise it after the settings pass to exercise the top tier's shaders anyway.
+    // An explicit manual tier is honoured even on a GPU the estimator calls weak, which is
+    // what lets this machine exercise the top tier's shaders at all.
     app.settings.patch({ autoQuality: false, quality: 'ultra' });
     app.applySettings();
-    app.quality.setCeiling('ultra');
     app.renderer.applyQuality();
     const ultraBefore = app.probeTick;
     await waitFor(() => app.probeTick > ultraBefore + 14, 60000, 'ultra frames').catch(() => undefined);
@@ -294,9 +342,16 @@ async function waitFor(predicate: () => boolean, timeoutMs: number, label: strin
 
 async function until(predicate: () => boolean, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
+  // Poll once per rendered frame rather than on a timer: the app advances in frames, and a
+  // four-second countdown can still slip between two 120 ms timer polls when the clock that
+  // the timers see is virtual. One frame between polls cannot miss a phase.
   while (Date.now() < deadline) {
     if (predicate()) return true;
-    await sleep(120);
+    await nextFrame();
   }
   return predicate();
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }

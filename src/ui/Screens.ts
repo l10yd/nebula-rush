@@ -46,6 +46,8 @@ export interface ScreenHost {
   resetSave(): void;
   summarize(difficulty: DifficultyId, mode: RaceMode): TrackSummary;
   returnTarget(): GamePhase;
+  /** The tier actually being rendered, which auto mode may hold below the request. */
+  qualityTier(): QualityTier;
   dailyKey(): string;
   deviceSummary(): string;
   audioBlocked(): boolean;
@@ -145,6 +147,28 @@ function sliderRow(
   return row(labelKey, el('div', { class: 'nr-slider', children: [input, readout] }), descKey);
 }
 
+/**
+ * Quality picker. When automatic mode is running a tier below what was asked for, the screen
+ * says so: a preset that quietly lies about itself is worse than a visible downgrade.
+ */
+function qualityRows(host: ScreenHost, rerender: () => void): HTMLElement[] {
+  const requested = host.settings.get('quality');
+  const actual = host.qualityTier();
+  const rows: HTMLElement[] = [row('settings.quality', segment(
+    QUALITIES.map((id) => ({ id, label: i18n.t(`quality.` as StringKey) })),
+    requested,
+    (id) => {
+      host.settings.set('quality', id as QualityTier);
+      host.applySettings();
+      rerender();
+    },
+    'settings.quality',
+  ))];
+  if (actual !== requested) {
+    rows.push(note(i18n.t('settings.effectiveTier', { q: i18n.t(`quality.` as StringKey) })));
+  }
+  return rows;
+}
 function switchRow(host: ScreenHost, labelKey: StringKey, key: keyof Settings, descKey?: StringKey): HTMLElement {
   const input = el('input', {
     attrs: { type: 'checkbox', checked: Boolean(host.settings.get(key)) },
@@ -534,16 +558,7 @@ export class GarageScreen extends Screen {
         (id) => this.unlockChoice(id as BiomeId, 'biome'),
         'brief.biome',
       ), `biome.${biome}.desc` as StringKey),
-      row('settings.quality', segment(
-        QUALITIES.map((id) => ({ id, label: i18n.t(`quality.${id}` as StringKey) })),
-        this.host.settings.get('quality'),
-        (id) => {
-          this.host.settings.set('quality', id as QualityTier);
-          this.host.applySettings();
-          this.show();
-        },
-        'settings.quality',
-      )),
+      ...qualityRows(this.host, () => this.show()),
       switchRow(this.host, 'settings.autoQuality', 'autoQuality', 'settings.autoQuality.desc'),
     ] });
   }
@@ -604,12 +619,7 @@ export class SettingsScreen extends Screen {
     const host = this.host;
     if (this.tab === 'graphics') {
       return el('div', { class: 'nr-col', children: [
-        row('settings.quality', segment(
-          QUALITIES.map((id) => ({ id, label: i18n.t(`quality.${id}` as StringKey) })),
-          host.settings.get('quality'),
-          (id) => { host.settings.set('quality', id as QualityTier); host.applySettings(); this.show(); },
-          'settings.quality',
-        )),
+        ...qualityRows(host, () => this.show()),
         switchRow(host, 'settings.autoQuality', 'autoQuality', 'settings.autoQuality.desc'),
         sliderRow(host, 'settings.uiScale', 'uiScale', 0.85, 1.25, 0.05, (v) => `${Math.round(v * 100)}%`),
         sliderRow(host, 'settings.fov', 'fovBias', -10, 14, 1, (v) => `${v > 0 ? '+' : ''}${v}°`),
