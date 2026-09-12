@@ -60,6 +60,13 @@ const AXIS_Z = new Vector3(0, 0, 1);
  */
 export class PropField {
   readonly root = new Object3D();
+  /** Instances drawn on the last frame, for the debug panel. */
+  get liveCount(): number {
+    let n = 0;
+    for (const mesh of this.instanced) n += mesh.count;
+    return n;
+  }
+
   private readonly channels = new Map<string, Channel>();
   private readonly scratch = new Object3D();
   private readonly frame = createFrame();

@@ -1,0 +1,14 @@
+[4784:1140:0912/233717.559:INFO:chrome\browser\browsing_data\browsing_data_lifetime_policy_handler.cc:125] The policy ClearBrowsingDataOnExitList automatically disabled the following sync types: autofill, typedUrls, tabs, savedTabGroups, payments
+[4784:1140:0912/233717.590:INFO:components\enterprise\browser\controller\chrome_browser_cloud_management_controller.cc:241] No machine level policy manager exists.
+[4784:1140:0912/233717.599:INFO:chrome\browser\browsing_data\browsing_data_lifetime_policy_handler.cc:125] The policy ClearBrowsingDataOnExitList automatically disabled the following sync types: autofill, typedUrls, tabs, savedTabGroups, payments
+[4784:2372:0912/233717.619:ERROR:chrome\browser\extensions\external_registry_loader_win.cc:147] Missing value path for key Software\Google\Chrome\Extensions\kadaohckdkghfaclhjmkmplebcdcnfnp.
+[4784:3964:0912/233717.683:WARNING:chrome\browser\media\router\discovery\discovery_network_list_win.cc:230] Failed to open WLAN handle: Служба не запущена. (0x426)
+[4784:1140:0912/233718.601:INFO:CONSOLE:5] "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.", source: http://127.0.0.1:4178/assets/three-B5nlDxmx.js (5)
+[4784:1140:0912/233718.602:INFO:CONSOLE:5] "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.", source: http://127.0.0.1:4178/assets/three-B5nlDxmx.js (5)
+[4784:1140:0912/233718.603:INFO:CONSOLE:5] "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.", source: http://127.0.0.1:4178/assets/three-B5nlDxmx.js (5)
+[4784:1140:0912/233718.603:INFO:CONSOLE:5] "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.", source: http://127.0.0.1:4178/assets/three-B5nlDxmx.js (5)
+[4784:1140:0912/233718.608:INFO:CONSOLE:5] "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.", source: http://127.0.0.1:4178/assets/three-B5nlDxmx.js (5)
+[4784:2772:0912/233720.446:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[4784:2772:0912/233720.447:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[4784:2772:0912/233720.448:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+893238 bytes written to file D:\Work\GLMWorkspace\nebula-rush\.verify\menu3.png

@@ -103,7 +103,7 @@ const GradeShader = {
       // Screen-edge hit flash, anchored away from the centre so it never masks the road.
       float edge = smoothstep(0.25, 0.72, radius);
       col = mix(col, uHurtColor, uHit * edge * 0.55);
-      col += uFlash * (0.5 + 0.5 * sin(uTime * 40.0)) * edge;
+      col += vec3(uFlash.x, uFlash.x * 0.6 + uFlash.y * 0.4, uFlash.y) * (0.5 + 0.5 * sin(uTime * 40.0)) * edge;
 
       float vig = 1.0 - uVignette * smoothstep(0.42, 1.05, radius * 1.25);
       col *= vig;

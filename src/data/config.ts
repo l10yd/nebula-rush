@@ -257,6 +257,14 @@ export const COSMETIC_PRICES = {
     stellar_forge: BIOMES.stellar_forge.unlockCost,
     void_rift: BIOMES.void_rift.unlockCost,
   } as Record<string, number>,
+  // Cosmetic only. No ship in the game is faster than another, and nothing here is
+  // required to finish a lane.
+  cosmetic: {
+    wing_lights: 320,
+    hud_frame: 480,
+    trail_sparkle: 260,
+    collapse_trail: 700,
+  } as Record<string, number>,
 };
 
 export const QUALITY: Record<QualityTier, {

@@ -17,6 +17,28 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
+/**
+ * Merges parts safely: three requires every input to agree on having an index, so each
+ * geometry is flattened first. Returns the merge, or the first part when it cannot merge.
+ */
+function mergeParts(parts: BufferGeometry[], fallbackName = ''): BufferGeometry {
+  const flat = parts.map((part) => (part.index ? part.toNonIndexed() : part));
+  const merged = mergeGeometries(flat, false);
+  for (let i = 0; i < flat.length; i++) {
+    if (flat[i] !== merged && flat[i] !== parts[i]) flat[i].dispose();
+    if (parts[i] !== flat[i]) parts[i].dispose();
+  }
+  const out = merged ?? flat[0] ?? new BufferGeometry();
+  if (fallbackName) out.name = fallbackName;
+  out.computeVertexNormals();
+  out.computeBoundingSphere();
+  return out;
+}
+
+/** Polyhedra arrive un-indexed; asking again only makes three warn. */
+function flatten(geo: BufferGeometry): BufferGeometry {
+  return geo.index ? geo.toNonIndexed() : geo;
+}
 const geometryCache = new Map<string, BufferGeometry>();
 const materialCache = new Map<string, MeshStandardMaterial | MeshBasicMaterial>();
 
@@ -40,7 +62,7 @@ function cached(key: string, build: () => BufferGeometry): BufferGeometry {
 }
 
 function displace(geo: BufferGeometry, seed: number, amount: number, longWave: number): BufferGeometry {
-  const flat = geo.toNonIndexed();
+  const flat = flatten(geo);
   const pos = flat.getAttribute('position');
   const v = new Vector3();
   const seen = new Map<string, number>();
@@ -100,12 +122,7 @@ export function mineGeometry(): BufferGeometry {
       spike.translate(dir.x * 0.72, dir.y * 0.72, dir.z * 0.72);
       spikes.push(spike);
     }
-    const merged = mergeGeometries(spikes, false);
-    for (const s of spikes) if (s !== merged) s.dispose();
-    const geo = merged ?? core;
-    geo.computeVertexNormals();
-    geo.computeBoundingSphere();
-    return geo;
+    return mergeParts([...spikes, core], 'mine');
   });
 }
 
@@ -125,7 +142,7 @@ export function anomalyCoreGeometry(): BufferGeometry {
 /** Rogue craft: hostile, angular, nose at -Z so the existing forward convention holds. */
 export function rogueGeometry(): BufferGeometry {
   return cached('rogue', () => {
-    const hull = new IcosahedronGeometry(0.62, 0).toNonIndexed();
+    const hull = flatten(new IcosahedronGeometry(0.62, 0));
     hull.scale(0.9, 0.66, 1.7);
     const prow = new ConeGeometry(0.42, 1.1, 4);
     prow.rotateX(-Math.PI / 2);
@@ -136,15 +153,7 @@ export function rogueGeometry(): BufferGeometry {
     const fin = new TetrahedronGeometry(0.4, 0);
     fin.scale(0.12, 0.9, 0.6);
     fin.translate(0, 0.4, 0.6);
-    const merged = mergeGeometries([hull, prow, wing, fin], false);
-    hull.dispose();
-    prow.dispose();
-    wing.dispose();
-    fin.dispose();
-    const geo = merged ?? hull;
-    geo.computeVertexNormals();
-    geo.computeBoundingSphere();
-    return geo;
+    return mergeParts([hull, prow, wing, fin], 'rogue');
   });
 }
 
@@ -154,13 +163,7 @@ export function wreckGeometry(variant: number): BufferGeometry {
     const plate = new TetrahedronGeometry(0.8, 0);
     plate.scale(1.4, 0.3, 0.9 + v * 0.3);
     const rib = new TorusGeometry(0.5 + v * 0.12, 0.06, 4, 10, Math.PI * (1 + v * 0.3));
-    const merged = mergeGeometries([plate, rib], false);
-    plate.dispose();
-    rib.dispose();
-    const geo = merged ?? plate;
-    geo.computeVertexNormals();
-    geo.computeBoundingSphere();
-    return geo;
+    return mergeParts([plate, rib], 'wreck');
   });
 }
 

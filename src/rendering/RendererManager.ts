@@ -11,6 +11,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { LANE } from '../data/config.ts';
 import type { QualityManager } from './QualityManager.ts';
 import type { BiomeTuning, ShipTuning, TrailTuning } from '../data/types.ts';
 import type { LanePath } from '../game/LanePath.ts';
@@ -72,6 +73,9 @@ export class RendererManager {
   private speedLines: SpeedLines | null = null;
   private post: PostFX | null = null;
   private ship: ShipVisual | null = null;
+  private cosmetics: readonly string[] = [];
+  private collapseWake = 0;
+  private frameTick = 0;
   private trails: RibbonTrail[] = [];
   private track: RenderableTrack | null = null;
   private biome: BiomeTuning | null = null;
@@ -79,6 +83,7 @@ export class RendererManager {
   private unbind: (() => void)[] = [];
   private elapsed = 0;
   private hitPulse = 0;
+  private ambientS = 0;
   private collapsePulse = 0;
   private showcaseAngle = 0;
   private width = 1;
@@ -176,6 +181,7 @@ export class RendererManager {
       t.dispose();
     }
     this.trails = [];
+    this.cosmetics = cosmetics;
     this.ship = createShipVisual(ship, trail, cosmetics, this.options.quality.current);
     this.shipRoot.add(this.ship.root);
     const segments = this.options.quality.profile.trailSegments;
@@ -200,6 +206,9 @@ export class RendererManager {
       }),
       rt.bus.on('shockwaveStart', () => {
         this.collapsePulse = 1;
+      }),
+      rt.bus.on('collapseBreak', () => {
+        if (this.cosmetics.includes('collapse_trail')) this.collapseWake = 1;
       }),
       rt.bus.on('death', () => {
         this.hitPulse = 1;
@@ -240,6 +249,22 @@ export class RendererManager {
     };
   }
 
+  /** Scene census for the debug panel and the headless harness. */
+  get sceneInfo(): { children: number; tunnel: boolean; props: number; ship: boolean; particleCapacity: number } {
+    return {
+      children: this.scene.children.length,
+      tunnel: this.tunnel !== null,
+      props: this.propField?.liveCount ?? 0,
+      ship: this.ship !== null,
+      particleCapacity: this.particles?.capacity ?? 0,
+    };
+  }
+
+  /** Live particle count, surfaced for the debug panel. */
+  get particleCount(): number {
+    return this.particles?.liveCount ?? 0;
+  }
+
   /** Applies the quality manager's current tier to every subsystem. */
   applyQuality(): void {
     const budget = this.options.quality.profile;
@@ -263,6 +288,7 @@ export class RendererManager {
   /** Garage and loading presentation: a hero orbit that needs no race state. */
   renderShowcase(dt: number, shipYaw = 0): void {
     this.elapsed += dt;
+    this.frameTick++;
     this.showcaseAngle += dt * 0.18;
     if (this.ship) {
       this.ship.root.position.set(0, 0, 0);
@@ -288,6 +314,101 @@ export class RendererManager {
     this.draw();
   }
 
+  /**
+   * Menu and garage backdrop: a slow cinematic dolly down the lane. The same subsystems run
+   * as in a race, minus the ship's own telemetry, so what the player sees in the menu is the
+   * real corridor rather than a facsimile.
+   */
+  renderAmbient(dt: number): void {
+    const path = this.track?.path;
+    if (!path || !this.tunnel || !this.track) {
+      this.renderShowcase(dt);
+      return;
+    }
+    const budget = this.options.quality.profile;
+    this.elapsed += dt;
+    this.frameTick++;
+    const span = Math.max(200, this.track.meta.length - 400);
+    this.ambientS = (this.ambientS + dt * 95) % span;
+    const s = this.ambientS;
+    const u = Math.sin(s * 0.0042) * LANE.halfWidth * 0.45;
+    const h = LANE.hoverBase + Math.sin(s * 0.0031) * 1.4;
+    path.frameAt(s, this.frame);
+    this.rig.update(
+      dt,
+      path,
+      {
+        s,
+        u,
+        h,
+        speed: 95,
+        maxSpeed: 240,
+        boost: 0.12 + Math.sin(this.elapsed * 0.7) * 0.12,
+        steer: Math.cos(s * 0.0042) * 0.4,
+        drift: 0,
+        laneRoll: this.frame.roll ?? 0,
+        bank: Math.sin(s * 0.0021) * 0.2,
+        pitch: 0,
+        shake: 0,
+        warp: 0,
+        interior: 0,
+        vortex: 0,
+        damage: 0,
+        perfect: false,
+      },
+      budget.tier,
+      true,
+      false,
+    );
+    RIGHT.set(this.frame.rx, this.frame.ry, this.frame.rz);
+    UP.set(this.frame.ux, this.frame.uy, this.frame.uz);
+    FWD.set(-this.frame.dx, -this.frame.dy, -this.frame.dz);
+    if (this.ship) {
+      const body = this.ship.root;
+      body.position.copy(path.pointTo(s, u, h, VEC, this.frame));
+      body.quaternion.copy(QUAT.setFromRotationMatrix(BASIS.makeBasis(RIGHT, UP, FWD)));
+      body.rotateZ(Math.sin(s * 0.0042) * 0.12);
+      this.ship.setBank(Math.sin(s * 0.0042) * 0.25, 0);
+      this.ship.update(dt, {
+        boost: 0.2,
+        steer: 0,
+        drift: 0,
+        throttle: 1,
+        brake: 0,
+        time: this.elapsed,
+        damage: 0,
+        shield: 0,
+        phase: false,
+        overdrive: 0,
+      });
+    }
+    updateTunnel(this.tunnel, this.track.rows, {
+      time: this.elapsed,
+      playerS: s,
+      flow: 0.9,
+      unstable: 0,
+      hurt: 0,
+      bandPulse: 0,
+    });
+    this.propField?.update(this.track.entities, s, this.elapsed, 0);
+    this.particles?.update(dt, this.rig.camera);
+    this.speedLines?.update(dt, 0.15, 0.1, 0, budget.speedLines * 0.4, this.rig.camera.fov, this.rig.camera.aspect);
+    this.environment.follow(this.rig.camera.position);
+    this.environment.update(dt, s, path);
+    this.post?.update({
+      time: this.elapsed,
+      aberration: budget.aberration ? 0.25 : 0,
+      boost: 0.1,
+      warp: 0,
+      hit: 0,
+      danger: 0,
+      desaturate: 0,
+      flashX: 0,
+      flashY: 0,
+    });
+    this.draw();
+  }
+
   /** The per-frame entry point while racing. */
   renderRaceFrame(rt: RaceRuntime, dt: number): void {
     const path = this.track?.path;
@@ -296,6 +417,7 @@ export class RendererManager {
     const p = rt.player;
     const topSpeed = Math.max(60, p.topSpeed);
     this.elapsed += dt;
+    this.frameTick++;
     this.hitPulse = Math.max(0, this.hitPulse - dt * 2.4);
     this.collapsePulse = Math.max(0, this.collapsePulse - dt * 0.8);
 
@@ -315,6 +437,45 @@ export class RendererManager {
       body.rotateZ(p.yawVis);
       body.rotateX(p.pitchVis);
       this.ship.setBank(p.bank, p.pitchVis * 0.4);
+      // Owned cosmetics only: both are particle dressing, never a gameplay difference.
+      if (this.cosmetics.includes('trail_sparkle') && p.boostEnvelope > 0.35 && this.particles) {
+        for (let i = 0; i < 2; i++) {
+          const jitter = ((this.frameTick * 7 + i * 13) % 11) / 11 - 0.5;
+          this.particles.spawn({
+            x: body.position.x - this.frame.dx * 2.4 + RIGHT.x * jitter * 1.6,
+            y: body.position.y - this.frame.dy * 2.4 + RIGHT.y * jitter * 1.6 + 0.3,
+            z: body.position.z - this.frame.dz * 2.4 + RIGHT.z * jitter * 1.6,
+            vx: -this.frame.dx * 26 + jitter * 8,
+            vy: -this.frame.dy * 26 + 3,
+            vz: -this.frame.dz * 26 + jitter * 8,
+            life: 0.5,
+            size: 0.5,
+            colorIndex: i % 2,
+            drag: 1.6,
+            growth: 0.4,
+          });
+        }
+      }
+      if (this.collapseWake > 0 && this.particles) {
+        this.collapseWake = Math.max(0, this.collapseWake - dt * 1.4);
+        const count = Math.ceil(this.collapseWake * 3);
+        for (let i = 0; i < count; i++) {
+          const a = (this.frameTick * 2.399963 + i) % 6.283;
+          this.particles.spawn({
+            x: body.position.x + Math.cos(a) * 1.5,
+            y: body.position.y + Math.sin(a) * 1.2,
+            z: body.position.z + Math.sin(a * 2) * 1.5,
+            vx: -this.frame.dx * 70,
+            vy: 0,
+            vz: -this.frame.dz * 70,
+            life: 0.85 * this.collapseWake,
+            size: 0.9,
+            colorIndex: 1,
+            drag: 0.9,
+            growth: 1.7,
+          });
+        }
+      }
       this.ship.update(dt, {
         boost: p.boostEnvelope,
         steer: rt.lastInput.steer,

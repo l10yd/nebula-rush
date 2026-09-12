@@ -1,9 +1,6 @@
 import { i18n } from '../data/i18n.ts';
 import type { StringKey } from '../data/i18n.ts';
 
-/** Element with the handful of children helpers actually used by the UI layer. */
-export interface El<T extends HTMLElement> extends T {}
-
 type Child = Node | string | null | undefined | false;
 
 /**
@@ -93,8 +90,7 @@ export function button(
   if (opts.className) classes.push(opts.className);
   const node = el('button', {
     class: classes.join(' '),
-    type: 'button',
-    attrs: { disabled: false },
+    attrs: { type: 'button', disabled: false },
     on: {
       click: (event) => {
         event.preventDefault();

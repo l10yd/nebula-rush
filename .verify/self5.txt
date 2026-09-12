@@ -1,0 +1,17 @@
+[10660:1020:0912/235646.161:INFO:chrome\browser\browsing_data\browsing_data_lifetime_policy_handler.cc:125] The policy ClearBrowsingDataOnExitList automatically disabled the following sync types: autofill, typedUrls, tabs, savedTabGroups, payments
+[10660:1020:0912/235646.191:INFO:components\enterprise\browser\controller\chrome_browser_cloud_management_controller.cc:241] No machine level policy manager exists.
+[10660:1020:0912/235646.200:INFO:chrome\browser\browsing_data\browsing_data_lifetime_policy_handler.cc:125] The policy ClearBrowsingDataOnExitList automatically disabled the following sync types: autofill, typedUrls, tabs, savedTabGroups, payments
+[10660:3248:0912/235646.219:ERROR:chrome\browser\extensions\external_registry_loader_win.cc:147] Missing value path for key Software\Google\Chrome\Extensions\kadaohckdkghfaclhjmkmplebcdcnfnp.
+[10660:5976:0912/235646.272:WARNING:chrome\browser\media\router\discovery\discovery_network_list_win.cc:230] Failed to open WLAN handle: Служба не запущена. (0x426)
+[10660:1020:0912/235648.135:INFO:CONSOLE:0] "[.WebGL-0x4afc00193800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels", source: http://127.0.0.1:4178/?selftest (0)
+[10660:1020:0912/235648.135:INFO:CONSOLE:0] "[.WebGL-0x4afc00193800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels", source: http://127.0.0.1:4178/?selftest (0)
+[10660:1020:0912/235648.135:INFO:CONSOLE:0] "[.WebGL-0x4afc00193800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels", source: http://127.0.0.1:4178/?selftest (0)
+[10660:1020:0912/235648.135:INFO:CONSOLE:0] "[.WebGL-0x4afc00193800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)", source: http://127.0.0.1:4178/?selftest (0)
+[10660:12612:0912/235649.014:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[10660:12612:0912/235649.015:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[10660:12612:0912/235649.015:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[10660:12612:0912/235649.143:ERROR:google_apis\gcm\engine\mcs_client.cc:702]   Error code: 401  Error message: Authentication Failed: wrong_secret
+[10660:12612:0912/235649.143:ERROR:google_apis\gcm\engine\mcs_client.cc:704] Failed to log in to GCM, resetting connection.
+Created TensorFlow Lite XNNPACK delegate for CPU.
+[10660:12612:0912/235712.445:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[10660:14392:0912/235716.221:INFO:chrome\browser\extensions\extension_garbage_collector.cc:188] Garbage collection for extensions on file thread is complete.

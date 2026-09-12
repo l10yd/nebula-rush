@@ -12,7 +12,7 @@ export interface PhaseHandlers<C> {
 
 const TRANSITIONS: Record<GamePhase, GamePhase[]> = {
   boot: ['loading'],
-  loading: ['main_menu'],
+  loading: ['main_menu', 'countdown'],
   main_menu: ['briefing', 'garage', 'settings', 'howto', 'loading'],
   garage: ['main_menu', 'briefing', 'settings'],
   settings: ['main_menu', 'garage', 'briefing', 'howto', 'paused'],
