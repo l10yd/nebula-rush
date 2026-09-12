@@ -25,6 +25,27 @@ export interface RaceConfig {
 
 export type RaceStatus = 'countdown' | 'running' | 'finished' | 'wrecked';
 
+/** Normalised intent for one fixed step. */
+export interface RaceInput {
+  throttle: number;
+  steer: number;
+  boost: boolean;
+  drift: boolean;
+  abilityPressed: boolean;
+  pausePressed: boolean;
+  restartPressed: boolean;
+}
+
+export const IDLE_INPUT: RaceInput = {
+  throttle: 0,
+  steer: 0,
+  boost: false,
+  drift: false,
+  abilityPressed: false,
+  pausePressed: false,
+  restartPressed: false,
+};
+
 /**
  * Owns one race: the ship simulation, the collapsing-lane director, the spectacle beats,
  * hazard interaction, scoring and the objective/warning stream that the HUD listens to.
@@ -43,6 +64,8 @@ export class RaceRuntime {
   private readonly frame = createFrame();
 
   status: RaceStatus = 'countdown';
+  /** Last intent seen by `step`, read by the renderer for throttle/brake visuals. */
+  lastInput: RaceInput = IDLE_INPUT;
   countdown = RACE.countdownSteps.length + RACE.countdownGoTime;
   time = 0;
   raceClock = 0;
@@ -122,7 +145,8 @@ export class RaceRuntime {
   }
 
   /** Fixed-timestep advance. `input` is a normalised intent frame. */
-  step(dt: number, input: { throttle: number; steer: number; boost: boolean; drift: boolean; abilityPressed: boolean; pausePressed: boolean; restartPressed: boolean }): void {
+  step(dt: number, input: RaceInput): void {
+    this.lastInput = input;
     this.time += dt;
 
     if (this.status === 'countdown') {
