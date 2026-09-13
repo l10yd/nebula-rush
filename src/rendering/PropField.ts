@@ -20,7 +20,6 @@ import {
   boostPadGeometry,
   emissiveMaterial,
   gateGeometry,
-  gateStrutGeometry,
   mineGeometry,
   pickupGeometry,
   rogueGeometry,
@@ -50,7 +49,6 @@ interface Channel {
   budget?: string;
 }
 
-const AXIS_Y = new Vector3(0, 1, 0);
 const AXIS_Z = new Vector3(0, 0, 1);
 
 /**
@@ -71,7 +69,6 @@ export class PropField {
   private readonly scratch = new Object3D();
   private readonly frame = createFrame();
   private readonly position = new Vector3();
-  private readonly right = new Vector3();
   private readonly up = new Vector3();
   private readonly laneQuat = new Quaternion();
   private readonly spinQuat = new Quaternion();
@@ -114,8 +111,6 @@ export class PropField {
     this.add('plasma', gateGeometry(), this.doubleSided(danger), 'plasma');
     this.add('anomaly', anomalyGeometry(), this.doubleSided(alt), 'anomaly');
     this.add('anomalyCore', anomalyCoreGeometry(), this.doubleSided(glow(biome.palette.deep, 0.9)), 'anomaly');
-    this.add('gate', gateGeometry(), accent, 'gate');
-    this.add('gate-strut', gateStrutGeometry(), wreckage, 'gate');
   }
 
   private doubleSided(material: ReturnType<typeof emissiveMaterial>): ReturnType<typeof emissiveMaterial> {
@@ -153,7 +148,7 @@ export class PropField {
       if (!row) continue;
       // Motion is evaluated by the same function collision uses, at the same sim time.
       applyMotion(e, time, Math.max(1, row.halfWidth - 0.5), row.height);
-      this.place(e, row, time);
+      this.place(e, time);
     }
 
     for (const ch of this.channels.values()) {
@@ -164,7 +159,7 @@ export class PropField {
     }
   }
 
-  private place(e: LaneEntity, row: LaneRow, time: number): void {
+  private place(e: LaneEntity, time: number): void {
     this.path.frameAt(e.s, this.frame);
     this.path.pointTo(e.s, e.cu, e.ch, this.position, this.frame);
     const laneQuat = this.orientation();
@@ -206,22 +201,10 @@ export class PropField {
         break;
       }
       case 'gate': {
-        const radius = Math.max(1.8, e.size);
-        // A closing gate shrinks its hoop: the read has to be about the hole, not the frame.
-        const open = 0.42 + 0.58 * clamp01(e.t);
-        const tremble = e.t < 0.66 ? 1 + Math.sin(time * 22) * 0.015 : 1;
-        this.emit('gate', this.position, laneQuat, radius * open * tremble, radius * open * tremble, 1);
-        if (this.tierScale > 0.6) {
-          // Struts flank the hoop only. There used to be a third one at u = 0: an opaque
-          // square column rising through the middle of the racing line at every gate,
-          // decorative to the sim but a solid wall to the camera.
-          for (const side of [-1, 1]) {
-            this.spinQuat.setFromAxisAngle(AXIS_Y, side * 0.5);
-            this.right.set(side * radius * 0.92, -row.height * 0.5 + radius * 0.15, 0).applyQuaternion(laneQuat);
-            this.emit('gate-strut', this.position.add(this.right), this.laneQuat.clone().multiply(this.spinQuat), radius * 0.14, row.height * 0.62, radius * 0.14);
-            this.position.sub(this.right);
-          }
-        }
+        // A gate is a scoring plane, not scenery: its hoop and struts repeated a turquoise
+        // frame down every stretch of road and hid the track behind it at race speed. The
+        // lane asked to be plain surface, so gates draw nothing now — crossing one still
+        // scores and still bursts through the particle FX.
         break;
       }
       case 'boostpad': {
@@ -279,6 +262,3 @@ export class PropField {
   }
 }
 
-function clamp01(v: number): number {
-  return v < 0 ? 0 : v > 1 ? 1 : v;
-}

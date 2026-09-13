@@ -162,11 +162,6 @@ varying float vSplit;
 varying float vDist;
 varying float vStation;
 
-float lineMask(float x, float width) {
-  float f = abs(fract(x) - 0.5) * 2.0;
-  return smoothstep(1.0 - width, 1.0, f);
-}
-
 void main() {
   // Dissolve: a gone section must actually be see-through, so drop those fragments.
   if (vInBand > 0.5 && vPhase >= 2.0) {
@@ -187,60 +182,21 @@ void main() {
   float isMedian = vPanel > 3.5 ? 1.0 : 0.0;
   float floorLike = vPanel < 0.5 || (vPanel > 0.5 && vPanel < 1.5) ? 1.0 : 0.0;
 
-  // Structure lines: a hairline tick at every row boundary and fainter ribs between them.
-  // These used to be wide smoothstep bands — over 40% of every 32 m row glowed, which at race
-  // speed read as a solid opaque ring flying at the camera every fifth of a second. The
-  // corridor's rhythm is a thin mark now; the rails and the centre ribbon do the guiding.
-  float rowLine = lineMask(vS / uRowLen, 0.06) * 0.18;
-  float rib = lineMask(vS / (uRowLen / 3.0), 0.05) * 0.03;
-  float lat = lineMask(vUNorm * 3.0 + 3.0, 0.18) * 0.05 * floorLike;
-  float lines = max(max(rowLine, rib), lat);
-  // On the floor and ceiling — straight into the player's view — the row ticks fade out
-  // almost entirely; wall seams keep the corridor's rhythm readable at the frame edges.
-  float lineGain = floorLike > 0.5 ? 0.4 : 1.0;
+  // The corridor is a road and nothing else. Every dressing that used to stripe the tunnel —
+  // row seams, ribs, lateral ticks, energy streaks, the centre chevron ribbon, the median
+  // glow strip, the bright guide rails — drew a turquoise frame around every repeating
+  // section; at race speed that grid of frames occluded the road ahead entirely. The player
+  // asked for plain track surface, so the panels now carry only: flat base shading, the
+  // faint edge lines below, the instability warnings and fog.
+  vec3 base = mix(uDeep, uMid, floorLike * 0.5 + vH * 0.08);
+  base = mix(base, uDeep, isMedian);
+  vec3 col = base * facingShade;
 
-  // Energy flow: streaks running along the lane, driven by actual speed. The cross coordinate
-  // is per-panel kind — uNorm on floor/ceiling, height on walls. vUNorm is CONSTANT (±1)
-  // across every wall face (it is the lane axis), so deriving streaks from it switched half
-  // the walls onto a full-face pulse.
-  float panelU = floorLike > 0.5 ? vUNorm : vH * 2.0 - 1.0;
-  float flowSeed = floor(panelU * 9.0 + 9.5) * 0.713 + vPanel * 2.1;
-  float lane = fract(sin(flowSeed * 12.9898) * 43758.5453);
-  float streakPos = fract(panelU * 0.5 + 0.5 + lane * 0.3);
-  float streakMask = smoothstep(0.02, 0.0, abs(streakPos - lane));
-  float flow = fract(vS * 0.012 - uTime * uFlow * 0.5 - lane * 3.0);
-  float flowPulse = pow(1.0 - abs(flow - 0.5) * 2.0, 8.0);
-  // "side" (= |vUNorm|) is honest only on floor/ceiling: it is 1 everywhere on walls. panelEdge
-  // is the true "how near is this pixel to a marked corridor edge" for each panel kind, and
-  // fixes the rail the same way — a wall is dark except where it meets floor and ceiling.
-  float wallEdge = max(smoothstep(0.92, 1.0, vH), smoothstep(0.08, 0.0, vH));
-  float panelEdge = floorLike > 0.5 ? side : wallEdge;
-  float edgeFlow = streakMask * flowPulse * (0.35 + 0.65 * panelEdge);
-
-  vec3 base = mix(uDeep, uMid, smoothstep(0.0, 1.0, side * 0.7 + vH * 0.25));
-  base = mix(base, uDeep, isMedian * 0.45);
-  float ao = 0.55 + 0.45 * smoothstep(0.0, 1.0, min(side, 1.0));
-  vec3 col = base * (0.34 + 0.66 * ao) * facingShade;
-
-  col += uAccent * lines * (0.5 + 0.5 * panelEdge) * lineGain;
-  col += uAccentAlt * edgeFlow * 0.35 * (1.0 - isMedian);
-
-  // Guide rails: the brightest thing in the corridor, but only at the corridor EDGES —
-  // the wall/floor and wall/ceiling junctions and the outer lip of the floor. The old
-  // smoothstep(0.86, 1.0, side) evaluated to 1.0 over an entire wall face, which is how the
-  // lane ended up lined with full-brightness turquoise billboards — the repeating opaque
-  // rectangles players could not see the next section through.
-  float rail = isWall * wallEdge;
-  float floorRail = smoothstep(0.9, 1.0, side) * floorLike;
-  col += mix(uAccent, uHot, 0.35) * (rail * 0.85 + floorRail * 0.4);
-
-  // Centre ribbon on the floor: reads the racing line at a glance.
-  float centre = smoothstep(0.14, 0.0, abs(vUNorm)) * (vPanel < 0.5 ? 1.0 : 0.0);
-  float chevron = pow(1.0 - abs(fract(vS * 0.06 - uTime * uFlow * 0.25) - 0.5) * 2.0, 3.0);
-  col += uAccent * centre * (0.14 + chevron * 0.38);
-
-  // Median strip so the split is unmistakable: a slim glow line on the fin, not a lit slab.
-  col += uAccentAlt * isMedian * (0.10 + lineMask(vS / uRowLen, 0.08) * 0.22);
+  // Where the road meets the walls: one thin, dim edge line. No white-hot core, no
+  // ceiling junction — a surface tint, not a neon strip.
+  float floorEdge = smoothstep(0.96, 1.0, side) * floorLike;
+  float wallFoot = isWall * smoothstep(0.05, 0.0, vH);
+  col += uAccent * (floorEdge + wallFoot) * 0.16;
 
   // Instability overlay: tint, cracks and a rising warning glow.
   float bandDist = vInBand;
