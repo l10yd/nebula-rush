@@ -1,6 +1,8 @@
 import {
   ACESFilmicToneMapping,
+  AmbientLight,
   Color,
+  DirectionalLight,
   Group,
   PerspectiveCamera,
   Quaternion,
@@ -9,6 +11,7 @@ import {
   Vector2,
   Vector3,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from 'three';
 import { LANE } from '../data/config.ts';
 import type { QualityManager } from './QualityManager.ts';
@@ -252,6 +255,67 @@ export class RendererManager {
       damage: p.damage,
       perfect: p.perfectTimer > 0.2,
     };
+  }
+
+  /**
+   * Still 3D previews for the garage cards. The cards used to paint a CSS gradient "halo"
+   * in place of the ship — which read as "the hulls don't render at all" — so each hull is
+   * rendered once, for real, into a small offscreen target and handed back as a data URL,
+   * cached because the garage rebuilds its DOM on every selection change.
+   */
+  private readonly thumbCache = new Map<string, string>();
+
+  renderShipThumb(ship: ShipTuning, trail: TrailTuning, cosmetics: readonly string[]): string {
+    const key = `${ship.id}|${trail.id}|${[...cosmetics].sort().join('+')}`;
+    const hit = this.thumbCache.get(key);
+    if (hit) return hit;
+    const W = 480;
+    const H = 264;
+    const scene = new Scene();
+    scene.environment = this.scene.environment;
+    const ambient = new AmbientLight(0xffffff, 1.15);
+    const keyLight = new DirectionalLight(0xffffff, 3.1);
+    keyLight.position.set(4, 5, 6);
+    const rim = new DirectionalLight(0x9db8ff, 2.2);
+    rim.position.set(-6, -2, -4);
+    const cam = new PerspectiveCamera(32, W / H, 0.1, 100);
+    cam.position.set(3.1, 1.3, 5.6);
+    cam.lookAt(0, -0.1, 0);
+    const visual = createShipVisual(ship, trail, cosmetics, 'high');
+    visual.root.rotation.y = -0.7;
+    visual.update(0.016, {
+      boost: 0.9, steer: 0.25, drift: 0, throttle: 1, brake: 0,
+      time: 1.7, damage: 0, shield: 0, phase: false, overdrive: 0,
+    });
+    scene.add(visual.root, ambient, keyLight, rim);
+    const target = new WebGLRenderTarget(W, H);
+    this.renderer.setRenderTarget(target);
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.render(scene, cam);
+    this.renderer.setRenderTarget(null);
+    this.renderer.setClearColor(0x000000, 1);
+    const px = new Uint8Array(W * H * 4);
+    this.renderer.readRenderTargetPixels(target, 0, 0, W, H, px);
+    target.dispose();
+    scene.remove(visual.root);
+    let url = '';
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const img = ctx.createImageData(W, H);
+      // WebGL reads bottom-up; flip rows into the 2D canvas.
+      for (let y = 0; y < H; y++) {
+        const src = (H - 1 - y) * W * 4;
+        const dst = y * W * 4;
+        img.data.set(px.subarray(src, src + W * 4), dst);
+      }
+      ctx.putImageData(img, 0, 0);
+      url = canvas.toDataURL('image/png');
+    }
+    this.thumbCache.set(key, url);
+    return url;
   }
 
   /** Scene census for the debug panel and the headless harness. */

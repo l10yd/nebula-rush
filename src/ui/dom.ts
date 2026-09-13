@@ -83,7 +83,7 @@ export function refreshLabels(root: Node): void {
 export function button(
   key: StringKey | null,
   onClick: () => void,
-  opts: { variant?: 'primary' | 'ghost' | 'danger' | 'icon'; className?: string; icon?: string; hint?: string; ariaKey?: string } = {},
+  opts: { variant?: 'primary' | 'ghost' | 'danger' | 'icon'; className?: string; icon?: string; hint?: string; ariaKey?: string; labelParams?: Record<string, string | number> } = {},
 ): HTMLButtonElement {
   const classes = ['nr-btn'];
   if (opts.variant) classes.push(opts.variant);
@@ -100,7 +100,7 @@ export function button(
     },
     children: [
       opts.icon ? el('span', { class: 'nr-btn-icon', text: opts.icon, attrs: { 'aria-hidden': 'true' } }) : null,
-      key ? label(key, 'nr-btn-label') : null,
+      key ? label(key, 'nr-btn-label', opts.labelParams) : null,
       opts.hint ? el('span', { class: 'nr-btn-hint', text: opts.hint }) : null,
     ],
   });

@@ -14,7 +14,7 @@ import {
 } from './data/config.ts';
 import { i18n } from './data/i18n.ts';
 import type { StringKey } from './data/i18n.ts';
-import type { BiomeId, DifficultyId, GamePhase, InputAction, QualityTier, RaceMode, RaceResult } from './data/types.ts';
+import type { BiomeId, DifficultyId, GamePhase, InputAction, QualityTier, RaceMode, RaceResult, ShipId } from './data/types.ts';
 import { SafeStorage, detectCapabilities, onResize, onVisibility, requestFullscreen } from './core/Platform.ts';
 import type { Capabilities } from './core/Platform.ts';
 import { SaveSystem, defaultQualityFor } from './core/SaveSystem.ts';
@@ -220,6 +220,17 @@ export class App implements ScreenHost {
   previewSetup(): void {
     this.applyShip();
     this.ui.applySettings();
+  }
+
+  /**
+   * A still 3D render of a hull (optionally wearing one extra cosmetic) for the garage card
+   * previews. The currently selected trail colours the engine glow so the fleet stays coherent.
+   */
+  shipThumb(ship: ShipId, extraCosmetic?: string): string | null {
+    const p = this.progress.value;
+    const trail = TRAILS[p.selectedTrail] ?? TRAILS.cyan;
+    const cosmetics = [...p.ownedCosmetics, ...(extraCosmetic ? [extraCosmetic] : [])];
+    return this.renderer.renderShipThumb(SHIPS[ship] ?? SHIPS.vireo, trail, cosmetics) || null;
   }
 
   applySettings(): void {

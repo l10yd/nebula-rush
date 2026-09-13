@@ -39,6 +39,8 @@ export interface ScreenHost {
   goto(phase: GamePhase): void;
   startRace(request: RaceRequest): void;
   previewSetup(): void;
+  /** Still 3D render of a hull for the garage card previews (null if unavailable). */
+  shipThumb(ship: ShipId, extraCosmetic?: string): string | null;
   applySettings(): void;
   toggleFullscreen(): void;
   rebind(action: InputAction): void;
@@ -399,6 +401,8 @@ export class BriefingScreen extends Screen {
 
 export class GarageScreen extends Screen {
   private tab: 'hulls' | 'trails' | 'cosmetics' | 'setup' = 'hulls';
+  /** The card the player last clicked — the [Buy] button acts on it. Cleared on tab change. */
+  private focus: { kind: 'hull' | 'trail' | 'cosmetic'; id: string } | null = null;
 
   constructor(host: ScreenHost) {
     super(host, 'garage');
@@ -416,13 +420,13 @@ export class GarageScreen extends Screen {
           class: `nr-tab ${this.tab === id ? 'is-active' : ''}`.trim(),
           text: i18n.t(`garage.tab.${id}` as StringKey),
           attrs: { type: 'button', role: 'tab', 'aria-selected': this.tab === id },
-          on: { click: () => { this.host.play('uiHover'); this.tab = id; this.show(); } },
+          on: { click: () => { this.host.play('uiHover'); this.tab = id; this.focus = null; this.show(); } },
         }),
       ) }),
       this.body2(),
       el('div', { class: 'nr-row nr-row--between', children: [
         note(i18n.t('garage.note')),
-        button('common.back', this.act('uiBack', () => this.host.goto('main_menu')), { variant: 'ghost' }),
+        el('div', { class: 'nr-row', children: [this.buyButton(), button('common.back', this.act('uiBack', () => this.host.goto('main_menu')), { variant: 'ghost' })] }),
       ] }),
     ]);
   }
@@ -444,10 +448,10 @@ export class GarageScreen extends Screen {
       : el('span', { class: `nr-price ${this.host.progress.credits >= price ? 'is-affordable' : ''}`.trim(), text: formatNumber(price) });
   }
 
-  private card(opts: { name: string; desc: string; owned: boolean; selected: boolean; price: number; art: HTMLElement | null; onPick: () => void }): HTMLElement {
+  private card(opts: { name: string; desc: string; owned: boolean; selected: boolean; focused: boolean; price: number; art: HTMLElement | null; onPick: () => void }): HTMLElement {
     return el('div', {
-      class: `nr-card ${opts.selected ? 'is-selected' : ''} ${opts.owned ? '' : 'is-locked'}`.trim(),
-      attrs: { role: 'button', tabindex: '0', 'aria-pressed': opts.selected },
+      class: `nr-card ${opts.focused ? 'is-selected' : ''} ${opts.owned ? '' : 'is-locked'}`.trim(),
+      attrs: { role: 'button', tabindex: '0', 'aria-pressed': opts.focused },
       on: {
         click: opts.onPick,
         keydown: (event) => {
@@ -469,19 +473,101 @@ export class GarageScreen extends Screen {
     });
   }
 
+  /** The focused card defaults to what the ship currently wears, so [Buy] opens disabled. */
+  private effectiveFocus(): { kind: 'hull' | 'trail' | 'cosmetic'; id: string } | null {
+    if (this.focus) return this.focus;
+    const progress = this.host.progress;
+    if (this.tab === 'hulls') return { kind: 'hull', id: progress.value.selectedShip };
+    if (this.tab === 'trails') return { kind: 'trail', id: progress.value.selectedTrail };
+    return null;
+  }
+
+  private isFocused(kind: 'hull' | 'trail' | 'cosmetic', id: string): boolean {
+    const f = this.effectiveFocus();
+    return !!f && f.kind === kind && f.id === id;
+  }
+
+  private focusInfo(): { kind: 'hull' | 'trail' | 'cosmetic'; id: string; owned: boolean; price: number; name: string } | null {
+    const f = this.effectiveFocus();
+    if (!f) return null;
+    const progress = this.host.progress;
+    if (f.kind === 'hull') {
+      const id = f.id as ShipId;
+      return { ...f, id, owned: id === 'vireo' || progress.hasShip(id), price: SHIPS[id].price, name: `${i18n.t('garage.hull')} · ${id.toUpperCase()}` };
+    }
+    if (f.kind === 'trail') {
+      const id = f.id as TrailId;
+      return { ...f, id, owned: id === 'cyan' || progress.hasTrail(id), price: TRAILS[id].price, name: `${i18n.t('garage.trail')} · ${id}` };
+    }
+    const owned = progress.hasCosmetic(f.id);
+    return { ...f, owned, price: COSMETIC_PRICES.cosmetic[f.id] ?? 0, name: i18n.t(`garage.cosmetic.${f.id}` as StringKey) };
+  }
+
+  /**
+   * Purchases are two-step: clicking a card only focuses it, the credit spend always happens
+   * here. The button sits in the bottom row beside [Back], is always visible, and is enabled
+   * exactly when the focused item is still unowned and affordable.
+   */
+  private buyButton(): HTMLButtonElement {
+    const info = this.focusInfo();
+    const owned = !!info && info.owned;
+    const affordable = !!info && this.host.progress.credits >= info.price;
+    const node = button(owned || !info ? 'garage.buyBtn' : 'garage.buyBtnPrice', this.act('uiClick', () => this.purchaseFocused()), {
+      variant: 'primary',
+      labelParams: info && !owned ? { price: formatNumber(info.price) } : undefined,
+    });
+    node.disabled = !info || owned || !affordable;
+    node.title = i18n.t(!info ? 'garage.buyNone' : owned ? 'garage.buyOwned' : 'toast.notEnough');
+    return node;
+  }
+
+  /** Clicking a card selects it; owned hulls/trails also equip on the spot (no purchase exists). */
+  private focusItem(kind: 'hull' | 'trail' | 'cosmetic', id: string, owned: boolean, equip: (() => void) | null): void {
+    this.host.play('uiClick');
+    this.focus = { kind, id };
+    if (owned && equip) equip();
+    this.show();
+  }
+
+  private purchaseFocused(): void {
+    const info = this.focusInfo();
+    if (!info || info.owned) return;
+    const progress = this.host.progress;
+    if (progress.credits < info.price) {
+      this.host.play('uiBack');
+      this.host.notify('toast.notEnough');
+      return;
+    }
+    if (!progress.spend(info.price)) return;
+    progress.unlock(info.kind === 'hull' ? 'ship' : info.kind, info.id);
+    if (info.kind === 'hull') progress.select('selectedShip', info.id as ShipId);
+    if (info.kind === 'trail') progress.select('selectedTrail', info.id as TrailId);
+    this.host.notify('toast.unlocked', { name: info.name });
+    this.host.previewSetup();
+    this.show();
+  }
+
+  private hullArt(id: ShipId): HTMLElement {
+    const ship = SHIPS[id];
+    const art = el('div', { class: 'nr-card-art', style: { background: `radial-gradient(120% 130% at 50% 130%, ${ship.accent}66, ${ship.hull}22 55%, transparent 75%)` } });
+    const url = this.host.shipThumb(id);
+    if (url) art.appendChild(el('img', { class: 'nr-card-thumb', attrs: { src: url, alt: '' } }));
+    return art;
+  }
+
   private shipCard(id: ShipId): HTMLElement {
     const ship = SHIPS[id];
     const progress = this.host.progress;
     const owned = id === 'vireo' || progress.hasShip(id);
     return this.card({
       name: `${i18n.t('garage.hull')} · ${ship.id.toUpperCase()}`,
-      desc: i18n.t('garage.previewHint'),
+      desc: i18n.t('garage.clickSelect'),
       owned,
-      selected: progress.value.selectedShip === id,
+      selected: owned && progress.value.selectedShip === id,
+      focused: this.isFocused('hull', id),
       price: ship.price,
-      art: el('div', { class: 'nr-card-art', style: { background: `radial-gradient(120% 130% at 50% 130%, ${ship.accent}66, ${ship.hull}22 55%, transparent 75%)` } }),
-      onPick: () => this.buy(owned, ship.price, () => {
-        if (!owned) progress.unlock('ship', id);
+      art: this.hullArt(id),
+      onPick: () => this.focusItem('hull', id, owned, () => {
         progress.select('selectedShip', id);
         this.host.previewSetup();
       }),
@@ -494,13 +580,13 @@ export class GarageScreen extends Screen {
     const owned = id === 'cyan' || progress.hasTrail(id);
     return this.card({
       name: `${i18n.t('garage.trail')} · ${id}`,
-      desc: i18n.t('garage.previewHint'),
+      desc: i18n.t('garage.clickSelect'),
       owned,
-      selected: progress.value.selectedTrail === id,
+      selected: owned && progress.value.selectedTrail === id,
+      focused: this.isFocused('trail', id),
       price: trail.price,
       art: el('div', { class: 'nr-card-art', style: { background: `linear-gradient(90deg, transparent, ${trail.halo}, ${trail.core})` } }),
-      onPick: () => this.buy(owned, trail.price, () => {
-        if (!owned) progress.unlock('trail', id);
+      onPick: () => this.focusItem('trail', id, owned, () => {
         progress.select('selectedTrail', id);
         this.host.previewSetup();
       }),
@@ -511,34 +597,25 @@ export class GarageScreen extends Screen {
     const progress = this.host.progress;
     const owned = progress.hasCosmetic(id);
     const key = `garage.cosmetic.${id}` as StringKey;
+    // Cosmetics that change the hull get the same real 3D preview, wearing that extra.
+    const visible = id === 'wing_lights' || id === 'glass_dome';
+    let art: HTMLElement | null = null;
+    if (visible) {
+      const url = this.host.shipThumb(progress.value.selectedShip, id);
+      art = url
+        ? el('div', { class: 'nr-card-art', children: [el('img', { class: 'nr-card-thumb', attrs: { src: url, alt: '' } })] })
+        : el('div', { class: 'nr-card-art' });
+    }
     return this.card({
       name: i18n.t(key),
       desc: i18n.t(`${key}.desc` as StringKey),
       owned,
       selected: owned,
+      focused: this.isFocused('cosmetic', id),
       price: COSMETIC_PRICES.cosmetic[id] ?? 0,
-      art: null,
-      onPick: () => this.buy(owned, COSMETIC_PRICES.cosmetic[id] ?? 0, () => {
-        progress.unlock('cosmetic', id);
-        this.host.previewSetup();
-      }),
+      art,
+      onPick: () => this.focusItem('cosmetic', id, owned, null),
     });
-  }
-
-  private buy(owned: boolean, price: number, onOwned: () => void): void {
-    const progress = this.host.progress;
-    if (!owned) {
-      if (progress.credits < price) {
-        this.host.play('uiBack');
-        this.host.notify('toast.notEnough');
-        return;
-      }
-      if (!progress.spend(price)) return;
-      this.host.notify('toast.unlocked', { name: i18n.t('garage.title') });
-    }
-    onOwned();
-    this.host.play('uiClick');
-    this.show();
   }
 
   private setup(): HTMLElement {

@@ -207,7 +207,8 @@ h1, h2, h3, p { margin: 0; }
 .nr-card:focus-visible { outline: 2px solid var(--nr-accent); outline-offset: 2px; }
 .nr-card.is-selected { border-color: var(--nr-accent); background: color-mix(in srgb, var(--nr-accent) 12%, transparent); box-shadow: var(--nr-glow); }
 .nr-card.is-locked { opacity: 0.6; }
-.nr-card-art { height: 92px; border-radius: 8px; background: radial-gradient(80% 120% at 50% 120%, color-mix(in srgb, var(--nr-accent) 30%, transparent), transparent 70%); border: 1px solid var(--nr-line); }
+.nr-card-art { position: relative; height: 92px; border-radius: 8px; overflow: hidden; background: radial-gradient(80% 120% at 50% 120%, color-mix(in srgb, var(--nr-accent) 30%, transparent), transparent 70%); border: 1px solid var(--nr-line); }
+.nr-card-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
 .nr-card-body { display: flex; flex-direction: column; gap: 0.25rem; }
 .nr-card-name { font-weight: 700; letter-spacing: 0.04em; }
 .nr-card-desc { font-size: 0.8rem; color: var(--nr-text-dim); }

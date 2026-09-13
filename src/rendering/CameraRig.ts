@@ -51,6 +51,7 @@ export class CameraRig {
   readonly camera: PerspectiveCamera;
 
   private readonly frame = createFrame();
+  private readonly entryFrame = createFrame();
   private readonly pos = new Vector3();
   private readonly look = new Vector3();
   private readonly up = new Vector3();
@@ -169,12 +170,16 @@ export class CameraRig {
       path.pointTo(back, side, lift, this.pos);
     } else {
       // Before the start line there is no corridor to stand in, so extrapolate along the
-      // entry tangent (the opening rows are straight) — the grid shot keeps the ship framed
-      // instead of the camera clamping on top of it.
-      this.pos.set(this.frame.px, this.frame.py, this.frame.pz);
-      this.pos.addScaledVector(this.fwd.set(this.frame.dx, this.frame.dy, this.frame.dz), back);
-      this.pos.addScaledVector(this.right.set(this.frame.rx, this.frame.ry, this.frame.rz), side);
-      this.pos.addScaledVector(this.up.set(this.frame.ux, this.frame.uy, this.frame.uz), lift);
+      // ENTRY tangent from the start-line frame (the opening rows are authored straight).
+      // Measuring from the PLAYER's frame instead double-counts `s` and parks the camera at
+      // `2s - distance` — it closes on the ship at twice ship speed, dives through the hull
+      // around s = distance/2 (the ship swells, stretches and "stays in place" for the first
+      // half-second of every race), then snaps back once the lane branch takes over.
+      path.frameAt(0, this.entryFrame);
+      this.pos.set(this.entryFrame.px, this.entryFrame.py, this.entryFrame.pz);
+      this.pos.addScaledVector(this.fwd.set(this.entryFrame.dx, this.entryFrame.dy, this.entryFrame.dz), back);
+      this.pos.addScaledVector(this.right.set(this.entryFrame.rx, this.entryFrame.ry, this.entryFrame.rz), side);
+      this.pos.addScaledVector(this.up.set(this.entryFrame.ux, this.entryFrame.uy, this.entryFrame.uz), lift);
     }
     // Lead the aim point down the corridor and into the curve, so the visible road is always
     // the road the player is about to fly.

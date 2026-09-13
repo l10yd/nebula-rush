@@ -196,36 +196,27 @@ void main() {
   float facingShade = 0.62 + 0.38 * pow(facing, 0.7);
 
   float side = abs(vUNorm);
-  float isWall = vPanel > 1.5 && vPanel < 3.5 ? 1.0 : 0.0;
   float isMedian = vPanel > 3.5 ? 1.0 : 0.0;
-  float isCeil = vPanel > 0.5 && vPanel < 1.5 ? 1.0 : 0.0;
   float floorLike = vPanel < 1.5 ? 1.0 : 0.0;
 
-  // The corridor is a road and it must READ as one at speed. uMid/uDeep arrive in display
-  // space (see buildTunnel), so this hierarchy is what the player actually sees: floor is the
-  // brightest plane in the frame, walls a clear step darker, ceiling dim, the median fins a
-  // solid divider. Dark biomes (deep_space mid ~ (0.04,0.09,0.19)) otherwise collapse under the
-  // ACES + sRGB grade to a value indistinguishable from the void, so the base tone is floored
-  // to a legible slate: this keeps the tube reading as ENCLOSED (walls and ceiling present)
-  // instead of a road floating in black, without washing the neon look back on.
+  // The lane is a bare road ribbon in the void — only the floor and the split curbs are built,
+  // so the shading only knows "road" and "curb". uMid/uDeep arrive in display space (see
+  // buildTunnel); dark biomes (deep_space mid ~ (0.04,0.09,0.19)) otherwise collapse under the
+  // ACES + sRGB grade into the same black as the void, so the tone is floored to a legible
+  // slate. The ribbon's outer margin darkens slightly so the road reads as a raised strip.
   vec3 tone = max(uMid, vec3(0.11, 0.13, 0.17));
   vec3 base = tone * 1.15;
-  base = mix(base, tone * 0.82, isWall);
-  base = mix(base, tone * 0.5, isCeil);
   base = mix(base, mix(uDeep, tone, 0.9) * 0.95, isMedian);
-  // A soft fall-off up the walls and toward the far rail keeps the tube from flattening out.
-  base *= 1.0 - isWall * vH * 0.28;
+  base *= 1.0 - 0.18 * smoothstep(0.8, 1.0, side) * floorLike;
   vec3 col = base * facingShade;
 
-  // Road markings: a dim dashed centre guide plus thin edge lines where the floor meets the
-  // walls. They orient the player at 250 km/h without becoming the only lit thing left.
-  float floorEdge = smoothstep(0.94, 1.0, side) * floorLike;
-  float wallFoot = isWall * smoothstep(0.06, 0.0, vH);
-  col += uAccent * (floorEdge + wallFoot) * 0.22;
-  float laneLine = (1.0 - step(0.02, abs(vUNorm))) * floorLike;
+  // Road markings: thin accent lines on the ribbon borders, a dashed centre guide, and a
+  // pair of branch guides through split sections (where the centre guide is suppressed).
+  float floorEdge = smoothstep(0.95, 1.0, side) * floorLike;
+  col += uAccent * floorEdge * 0.22;
+  float laneLine = (1.0 - step(0.02, abs(vUNorm))) * floorLike * (1.0 - vSplit);
   float dash = step(0.55, fract(vS * 0.0625));
   col += uAccent * laneLine * dash * 0.16;
-  // Split sections: a pair of guide lines so each branch reads before the fin does.
   float branchLine = (1.0 - step(0.018, abs(abs(vUNorm) - 0.5))) * floorLike * vSplit;
   col += uAccent * branchLine * 0.10;
 
@@ -290,7 +281,11 @@ export function buildTunnel(rows: LaneRow[], path: LanePath, biome: BiomeTuning,
   const PRE_STATIONS = 8;
   const stations = rows.length + 1 + PRE_STATIONS;
   const segs = quality === 'low' ? Math.max(3, LANE.segsPerRow - 2) : LANE.segsPerRow;
-  const panels = 6;
+  // The lane is a bare road ribbon floating in the void: only the floor plus the low median
+  // curbs of split sections are built — no walls, no ceiling (they used to mirror the road's
+  // markings onto the ceiling and box the view in).
+  const PANEL_LIST = [PANEL_FLOOR, PANEL_MEDIAN_L, PANEL_MEDIAN_R];
+  const panels = PANEL_LIST.length;
   const perStation = panels * (segs + 1);
   const totalVerts = stations * perStation;
 
@@ -300,7 +295,7 @@ export function buildTunnel(rows: LaneRow[], path: LanePath, biome: BiomeTuning,
   const meta = new Float32Array(totalVerts * 4);
   const dims = new Float32Array(totalVerts * 2);
   const uv = new Float32Array(totalVerts * 2);
-  // 1080 stations × 6 panels × 7 vertices is already past 65k, so indices need 32 bits.
+  // ~1080 stations × 3 panels × 7 vertices is already past 65k, so indices need 32 bits.
   const index = new Uint32Array((stations - 1) * panels * segs * 6);
 
   const frame = { px: 0, py: 0, pz: 0, dx: 0, dy: 0, dz: 1, rx: 1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0, hw: 9, hh: 6.5, row: 0, roll: 0 };
@@ -387,27 +382,23 @@ export function buildTunnel(rows: LaneRow[], path: LanePath, biome: BiomeTuning,
     const medianOn = medianFlags[station] === 1;
     const medianHalf = medianOn ? Math.max(0.8, rows[Math.max(0, rowIdx)].medianHalf) : 0;
 
-    for (let panel = 0; panel < panels; panel++) {
+    for (let panelIdx = 0; panelIdx < panels; panelIdx++) {
+      const panel = PANEL_LIST[panelIdx];
       const first = vi;
       for (let k = 0; k <= segs; k++) {
         const t = k / segs;
-        if (panel === PANEL_FLOOR || panel === PANEL_CEILING) {
+        if (panel === PANEL_FLOOR) {
           const uNorm = -1 + t * 2;
           const u = uNorm * hw;
-          const h = panel === PANEL_FLOOR ? 0 : hh;
-          path.pointTo(s, u, h, p, frame);
-          writeVertex(rowIdx, panel, uNorm, t, hw, hh);
-        } else if (panel === PANEL_LEFT || panel === PANEL_RIGHT) {
-          const uNorm = panel === PANEL_LEFT ? -1 : 1;
-          const u = uNorm * (hw - 0.02);
-          const h = t * hh;
-          path.pointTo(s, u, h, p, frame);
+          path.pointTo(s, u, 0, p, frame);
           writeVertex(rowIdx, panel, uNorm, t, hw, hh);
         } else {
           // Median panels collapse to a degenerate strip wherever there is no divider.
+          // Where a split runs they stand up as a LOW CURB (~0.3 m) on the road — enough to
+          // read the divider without reintroducing wall/ceiling geometry.
           const uNorm = panel === PANEL_MEDIAN_L ? -medianHalf / Math.max(0.001, hw) : medianHalf / Math.max(0.001, hw);
           const u = medianOn ? (panel === PANEL_MEDIAN_L ? -medianHalf : medianHalf) : 0;
-          const h = medianOn ? t * hh * 0.42 : 0;
+          const h = medianOn ? t * 0.3 : 0;
           path.pointTo(s, u, h, p, frame);
           writeVertex(rowIdx, panel, medianOn ? uNorm : 0, t, hw, hh);
         }
@@ -425,10 +416,8 @@ export function buildTunnel(rows: LaneRow[], path: LanePath, biome: BiomeTuning,
         // vertex k/k+1 at this station and at the next one. The next station's copy of this
         // panel starts exactly `perStation` vertices later (the buffer is laid out
         // [station][panel][k]). Using `segs + 1` here — one panel's worth — stitched each
-        // panel to the NEXT PANEL of the same station (floor→ceiling, left wall→right wall…),
-        // which is why the mesh was never a corridor at all: it was a chain of vertical
-        // curtains stretched across the bore — the black rectangles with turquoise frames —
-        // with no floor, walls or ceiling emitted anywhere.
+        // panel to the NEXT PANEL of the same station, turning the mesh into a chain of
+        // curtains stretched across the bore instead of a floor running down it.
         const c = a + perStation;
         const d = c + 1;
         if (panel === PANEL_CEILING || panel === PANEL_RIGHT || panel === PANEL_MEDIAN_L) {
