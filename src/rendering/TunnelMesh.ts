@@ -174,29 +174,34 @@ void main() {
   vec3 n = normalize(vNormal);
   vec3 v = normalize(vView);
   float facing = clamp(dot(n, v), 0.0, 1.0);
-  // Panels seen edge-on go dark: keeps the corridor a hard, readable volume.
-  float facingShade = 0.28 + 0.72 * pow(facing, 0.7);
+  // Grazing surfaces must stay visible: with a 0.28 floor here, every wall the player looked
+  // DOWN along went nearly black, and the only lit thing left on it was its teal foot line —
+  // so each curved section read as a black rectangle with a turquoise frame standing across
+  // the road. A shallow angle dims a surface; it must not erase it.
+  float facingShade = 0.55 + 0.45 * pow(facing, 0.7);
 
   float side = abs(vUNorm);
   float isWall = vPanel > 1.5 && vPanel < 3.5 ? 1.0 : 0.0;
   float isMedian = vPanel > 3.5 ? 1.0 : 0.0;
-  float floorLike = vPanel < 0.5 || (vPanel > 0.5 && vPanel < 1.5) ? 1.0 : 0.0;
+  float isCeil = vPanel > 0.5 && vPanel < 1.5 ? 1.0 : 0.0;
+  float floorLike = vPanel < 1.5 ? 1.0 : 0.0;
 
-  // The corridor is a road and nothing else. Every dressing that used to stripe the tunnel —
-  // row seams, ribs, lateral ticks, energy streaks, the centre chevron ribbon, the median
-  // glow strip, the bright guide rails — drew a turquoise frame around every repeating
-  // section; at race speed that grid of frames occluded the road ahead entirely. The player
-  // asked for plain track surface, so the panels now carry only: flat base shading, the
-  // faint edge lines below, the instability warnings and fog.
-  vec3 base = mix(uDeep, uMid, floorLike * 0.5 + vH * 0.08);
-  base = mix(base, uDeep, isMedian);
+  // The corridor is a road and nothing else — but a road you can SEE. Matte tones, no
+  // repeating lines: the floor is the brightest plane, walls a step darker, ceiling dim,
+  // the median fins read as solid dividers instead of black voids. (Previous pass went the
+  // other way: pitch-black panels left only the teal edge lines visible — which at speed
+  // looked like black hoops flying at the camera, the exact complaint this now fixes.)
+  vec3 base = uMid * 1.35;
+  base = mix(base, mix(uDeep, uMid, 0.62), isWall);
+  base = mix(base, uMid * 0.5, isCeil);
+  base = mix(base, mix(uDeep, uMid, 0.8), isMedian);
   vec3 col = base * facingShade;
 
-  // Where the road meets the walls: one thin, dim edge line. No white-hot core, no
-  // ceiling junction — a surface tint, not a neon strip.
+  // Where the road meets the walls: one thin, dim edge line to keep the tube's silhouette
+  // legible against the dark. A surface tint, not a neon strip.
   float floorEdge = smoothstep(0.96, 1.0, side) * floorLike;
   float wallFoot = isWall * smoothstep(0.05, 0.0, vH);
-  col += uAccent * (floorEdge + wallFoot) * 0.16;
+  col += uAccent * (floorEdge + wallFoot) * 0.10;
 
   // Instability overlay: tint, cracks and a rising warning glow.
   float bandDist = vInBand;
@@ -320,12 +325,22 @@ export function buildTunnel(rows: LaneRow[], path: LanePath, biome: BiomeTuning,
     vi++;
   };
 
+  // Which stations carry median fins. Quads across an on/off boundary must not be built:
+  // the fin panel collapses to a single point (u = 0, h = 0) wherever there is no divider,
+  // so the boundary quad swept from the fin's edge down to the centre of the floor — a big
+  // black triangle wing standing across the road at every split-section start and end,
+  // which at speed looked like a solid frame the ship flew "through".
+  const medianFlags = new Uint8Array(stations);
+  for (let station = 0; station < stations; station++) {
+    medianFlags[station] = station < rows.length && rows[station].lanes === 2 ? 1 : 0;
+  }
+
   for (let station = 0; station < stations; station++) {
     const s = Math.min(station * LANE.rowLen, rows[rows.length - 1].s1);
     path.frameAt(s, frame);
     const hw = frame.hw;
     const hh = frame.hh;
-    const medianOn = frame.row < rows.length && rows[Math.min(rows.length - 1, station)].lanes === 2;
+    const medianOn = medianFlags[station] === 1;
     const medianHalf = medianOn ? Math.max(0.8, rows[Math.min(rows.length - 1, station)].medianHalf) : 0;
 
     for (let panel = 0; panel < panels; panel++) {
@@ -352,6 +367,10 @@ export function buildTunnel(rows: LaneRow[], path: LanePath, biome: BiomeTuning,
           path.pointTo(s, u, h, p, frame);
           writeVertex(station, panel, medianOn ? uNorm : 0, t, hw, hh);
         }
+      }
+      if (panel === PANEL_MEDIAN_L || panel === PANEL_MEDIAN_R) {
+        // No strip segment between a fin station and a collapsed one (see medianFlags).
+        if (medianFlags[station] !== 1 || medianFlags[station + 1] !== 1) continue;
       }
       for (let k = 0; k < segs; k++) {
         const a = first + k;
@@ -384,7 +403,7 @@ export function buildTunnel(rows: LaneRow[], path: LanePath, biome: BiomeTuning,
   geometry.setAttribute('aMeta', new Float32BufferAttribute(meta, 4));
   geometry.setAttribute('aDims', new Float32BufferAttribute(dims, 2));
   geometry.setAttribute('uv', new Float32BufferAttribute(uv, 2));
-  geometry.setIndex(new BufferAttribute(index, 1));
+  geometry.setIndex(new BufferAttribute(index.subarray(0, ii), 1));
   geometry.computeBoundingSphere();
 
   const rowCount = rows.length;
