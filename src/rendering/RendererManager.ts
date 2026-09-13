@@ -2,7 +2,6 @@ import {
   ACESFilmicToneMapping,
   Color,
   Group,
-  Matrix4,
   PerspectiveCamera,
   Quaternion,
   Scene,
@@ -20,6 +19,7 @@ import type { LaneFrame } from '../game/LanePath.ts';
 import type { GeneratedTrack } from '../game/trackTypes.ts';
 import type { RaceRuntime } from '../game/RaceRuntime.ts';
 import { CameraRig } from './CameraRig.ts';
+import { laneOrientation } from './laneOrientation.ts';
 import type { CameraInput } from './CameraRig.ts';
 import { SceneEnvironment } from './Environment.ts';
 import { FxDispatcher, ParticleSystem } from './Particles.ts';
@@ -44,10 +44,7 @@ export interface RendererOptions {
   shakeEnabled: boolean;
 }
 
-const BASIS = new Matrix4();
 const RIGHT = new Vector3();
-const UP = new Vector3();
-const FWD = new Vector3();
 const QUAT = new Quaternion();
 const VEC = new Vector3();
 
@@ -368,13 +365,10 @@ export class RendererManager {
       true,
       false,
     );
-    RIGHT.set(this.frame.rx, this.frame.ry, this.frame.rz);
-    UP.set(this.frame.ux, this.frame.uy, this.frame.uz);
-    FWD.set(this.frame.dx, this.frame.dy, this.frame.dz);
     if (this.ship) {
       const body = this.ship.root;
       body.position.copy(path.pointTo(s, u, h, VEC, this.frame));
-      body.quaternion.copy(QUAT.setFromRotationMatrix(BASIS.makeBasis(RIGHT, UP, FWD)));
+      body.quaternion.copy(laneOrientation(this.frame, QUAT));
       body.rotateY(-Math.sin(s * 0.0042) * 0.12);
       this.ship.setBank(Math.sin(s * 0.0042) * 0.25, 0);
       this.ship.update(dt, {
@@ -439,12 +433,7 @@ export class RendererManager {
       const body = this.ship.root;
       body.position.copy(world);
       RIGHT.set(this.frame.rx, this.frame.ry, this.frame.rz);
-      UP.set(this.frame.ux, this.frame.uy, this.frame.uz);
-      // (right, up, dir) is the lane's own rotation basis; the hull model has its nose along
-      // local +z. Negating the third column mirrors the matrix (det -1), which silently
-      // collapses the derived quaternion into a degenerate one.
-      FWD.set(this.frame.dx, this.frame.dy, this.frame.dz);
-      body.quaternion.copy(QUAT.setFromRotationMatrix(BASIS.makeBasis(RIGHT, UP, FWD)));
+      body.quaternion.copy(laneOrientation(this.frame, QUAT));
       body.rotateY(-p.yawVis);
       body.rotateX(p.pitchVis);
       this.ship.setBank(p.bank, p.pitchVis * 0.4);

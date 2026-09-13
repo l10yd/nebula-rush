@@ -187,13 +187,17 @@ void main() {
   float isMedian = vPanel > 3.5 ? 1.0 : 0.0;
   float floorLike = vPanel < 0.5 || (vPanel > 0.5 && vPanel < 1.5) ? 1.0 : 0.0;
 
-  // Structure lines: a seam at every row, fainter ribs inside it. These mark the corridor's
-  // rhythm, but they used to be wide, full-brightness bands — flying past one every fifth of
-  // a second read as a strobe. They are deliberately thin and dim now; rails do the marking.
-  float rowLine = lineMask(vS / uRowLen, 0.42) * 0.30;
-  float rib = lineMask(vS / (uRowLen / 3.0), 0.32) * 0.08;
-  float lat = lineMask(vUNorm * 3.0 + 3.0, 0.62) * 0.07 * floorLike;
+  // Structure lines: a hairline tick at every row boundary and fainter ribs between them.
+  // These used to be wide smoothstep bands — over 40% of every 32 m row glowed, which at race
+  // speed read as a solid opaque ring flying at the camera every fifth of a second. The
+  // corridor's rhythm is a thin mark now; the rails and the centre ribbon do the guiding.
+  float rowLine = lineMask(vS / uRowLen, 0.06) * 0.18;
+  float rib = lineMask(vS / (uRowLen / 3.0), 0.05) * 0.03;
+  float lat = lineMask(vUNorm * 3.0 + 3.0, 0.18) * 0.05 * floorLike;
   float lines = max(max(rowLine, rib), lat);
+  // On the floor and ceiling — straight into the player's view — the row ticks fade out
+  // almost entirely; wall seams keep the corridor's rhythm readable at the frame edges.
+  float lineGain = floorLike > 0.5 ? 0.4 : 1.0;
 
   // Energy flow: streaks running along the lane, driven by actual speed.
   float flowSeed = floor(vUNorm * 9.0 + 9.5) * 0.713 + vPanel * 2.1;
@@ -209,7 +213,7 @@ void main() {
   float ao = 0.55 + 0.45 * smoothstep(0.0, 1.0, min(side, 1.0));
   vec3 col = base * (0.34 + 0.66 * ao) * facingShade;
 
-  col += uAccent * lines * (0.5 + 0.5 * side);
+  col += uAccent * lines * (0.5 + 0.5 * side) * lineGain;
   col += uAccentAlt * edgeFlow * 0.35 * (1.0 - isMedian);
 
   // Guide rails: the brightest thing in the corridor, always marking the flyable edges.
@@ -223,8 +227,8 @@ void main() {
   float chevron = pow(1.0 - abs(fract(vS * 0.06 - uTime * uFlow * 0.25) - 0.5) * 2.0, 3.0);
   col += uAccent * centre * (0.14 + chevron * 0.38);
 
-  // Median strip so the split is unmistakable.
-  col += uAccentAlt * isMedian * (0.12 + lineMask(vS / uRowLen, 0.5) * 0.35);
+  // Median strip so the split is unmistakable: a slim glow line on the fin, not a lit slab.
+  col += uAccentAlt * isMedian * (0.10 + lineMask(vS / uRowLen, 0.08) * 0.22);
 
   // Instability overlay: tint, cracks and a rising warning glow.
   float bandDist = vInBand;

@@ -2,7 +2,6 @@ import {
   DoubleSide,
   DynamicDrawUsage,
   InstancedMesh,
-  Matrix4,
   Object3D,
   Quaternion,
   Vector3,
@@ -13,6 +12,7 @@ import { applyMotion } from '../game/CollisionSystem.ts';
 import { EF, type LaneEntity, type LaneRow } from '../game/trackTypes.ts';
 import type { LanePath } from '../game/LanePath.ts';
 import { createFrame } from '../game/LanePath.ts';
+import { laneOrientation } from './laneOrientation.ts';
 import {
   anomalyCoreGeometry,
   anomalyGeometry,
@@ -71,10 +71,8 @@ export class PropField {
   private readonly scratch = new Object3D();
   private readonly frame = createFrame();
   private readonly position = new Vector3();
-  private readonly basis = new Matrix4();
   private readonly right = new Vector3();
   private readonly up = new Vector3();
-  private readonly fwd = new Vector3();
   private readonly laneQuat = new Quaternion();
   private readonly spinQuat = new Quaternion();
   private readonly instanced: InstancedMesh[] = [];
@@ -214,7 +212,10 @@ export class PropField {
         const tremble = e.t < 0.66 ? 1 + Math.sin(time * 22) * 0.015 : 1;
         this.emit('gate', this.position, laneQuat, radius * open * tremble, radius * open * tremble, 1);
         if (this.tierScale > 0.6) {
-          for (const side of [-1, 0, 1]) {
+          // Struts flank the hoop only. There used to be a third one at u = 0: an opaque
+          // square column rising through the middle of the racing line at every gate,
+          // decorative to the sim but a solid wall to the camera.
+          for (const side of [-1, 1]) {
             this.spinQuat.setFromAxisAngle(AXIS_Y, side * 0.5);
             this.right.set(side * radius * 0.92, -row.height * 0.5 + radius * 0.15, 0).applyQuaternion(laneQuat);
             this.emit('gate-strut', this.position.add(this.right), this.laneQuat.clone().multiply(this.spinQuat), radius * 0.14, row.height * 0.62, radius * 0.14);
@@ -266,11 +267,7 @@ export class PropField {
 
   /** Lane-frame orientation baked from the path, so props sit square in a banked corridor. */
   private orientation(): Quaternion {
-    this.right.set(this.frame.rx, this.frame.ry, this.frame.rz);
-    this.up.set(this.frame.ux, this.frame.uy, this.frame.uz);
-    this.fwd.set(-this.frame.dx, -this.frame.dy, -this.frame.dz);
-    this.basis.makeBasis(this.right, this.up, this.fwd);
-    return this.laneQuat.setFromRotationMatrix(this.basis);
+    return laneOrientation(this.frame, this.laneQuat);
   }
 
   dispose(): void {

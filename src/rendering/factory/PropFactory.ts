@@ -139,7 +139,7 @@ export function anomalyCoreGeometry(): BufferGeometry {
   return cached('anomaly-core', () => new SphereGeometry(0.62, 12, 10));
 }
 
-/** Rogue craft: hostile, angular, nose at -Z so the existing forward convention holds. */
+/** Rogue craft: hostile, angular. Nose ends up at +Z, matching the hull and corridor basis. */
 export function rogueGeometry(): BufferGeometry {
   return cached('rogue', () => {
     const hull = flatten(new IcosahedronGeometry(0.62, 0));
@@ -153,7 +153,11 @@ export function rogueGeometry(): BufferGeometry {
     const fin = new TetrahedronGeometry(0.4, 0);
     fin.scale(0.12, 0.9, 0.6);
     fin.translate(0, 0.4, 0.6);
-    return mergeParts([hull, prow, wing, fin], 'rogue');
+    const merged = mergeParts([hull, prow, wing, fin], 'rogue');
+    // Authored nose-first along -Z (the old mirrored-basis convention); the corridor now maps
+    // local +Z to the direction of travel, so flip the part list once at build time.
+    merged.rotateY(Math.PI);
+    return merged;
   });
 }
 
