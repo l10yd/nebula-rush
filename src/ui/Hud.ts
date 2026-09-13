@@ -47,6 +47,7 @@ export class Hud {
   }));
   private readonly cache = new Map<string, string | number | boolean>();
   private flashUntil = 0;
+  private countdownUntil = 0;
 
   constructor() {
     append(this.shieldRow, this.shieldPips);
@@ -157,6 +158,11 @@ export class Hud {
     this.syncWarnings(rt);
     this.root.classList.toggle('is-damaged', rt.player.damage > 0.55);
 
+    if (time >= this.countdownUntil && this.countdown.classList.contains('is-active')) {
+      this.countdown.classList.remove('is-active');
+      this.countdown.textContent = '';
+    }
+
     if (time < this.flashUntil) return;
     if (this.flash.textContent) {
       this.flash.textContent = '';
@@ -191,6 +197,9 @@ export class Hud {
     this.countdown.classList.remove('is-active');
     // Restart the animation without forcing a synchronous reflow of the whole subtree.
     requestAnimationFrame(() => this.countdown.classList.add('is-active'));
+    // Nothing else ever takes `is-active` off, so the final "GO" used to sit at full-screen
+    // opacity over the whole race: each tick hides itself when its beat is over.
+    this.countdownUntil = performance.now() / 1000 + (value > 0 ? 0.9 : 1.15);
   }
 
   /** Optional readout; hidden unless the player asked for it in settings. */

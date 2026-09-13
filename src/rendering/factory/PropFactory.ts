@@ -236,8 +236,11 @@ export function shellGeometry(): BufferGeometry {
 
 export function boostPadGeometry(): BufferGeometry {
   return cached('pad', () => {
+    // A shallow pyramid lying flat: base in the XZ plane, low apex toward lane up.
+    // The rotateX(PI/2) this used to carry stood the base in the corridor cross-section, so
+    // every boost pad became a turquoise diamond slab spanning up to the flight line at
+    // h ~ 2.9 m — "opaque rectangles" all along the track.
     const geo = new ConeGeometry(1, 0.55, 4);
-    geo.rotateX(Math.PI / 2);
     geo.computeBoundingSphere();
     return geo;
   });

@@ -199,26 +199,38 @@ void main() {
   // almost entirely; wall seams keep the corridor's rhythm readable at the frame edges.
   float lineGain = floorLike > 0.5 ? 0.4 : 1.0;
 
-  // Energy flow: streaks running along the lane, driven by actual speed.
-  float flowSeed = floor(vUNorm * 9.0 + 9.5) * 0.713 + vPanel * 2.1;
+  // Energy flow: streaks running along the lane, driven by actual speed. The cross coordinate
+  // is per-panel kind — uNorm on floor/ceiling, height on walls. vUNorm is CONSTANT (±1)
+  // across every wall face (it is the lane axis), so deriving streaks from it switched half
+  // the walls onto a full-face pulse.
+  float panelU = floorLike > 0.5 ? vUNorm : vH * 2.0 - 1.0;
+  float flowSeed = floor(panelU * 9.0 + 9.5) * 0.713 + vPanel * 2.1;
   float lane = fract(sin(flowSeed * 12.9898) * 43758.5453);
-  float streakPos = fract(vUNorm * 0.5 + 0.5 + lane * 0.3);
+  float streakPos = fract(panelU * 0.5 + 0.5 + lane * 0.3);
   float streakMask = smoothstep(0.02, 0.0, abs(streakPos - lane));
   float flow = fract(vS * 0.012 - uTime * uFlow * 0.5 - lane * 3.0);
   float flowPulse = pow(1.0 - abs(flow - 0.5) * 2.0, 8.0);
-  float edgeFlow = streakMask * flowPulse * (0.35 + 0.65 * side);
+  // "side" (= |vUNorm|) is honest only on floor/ceiling: it is 1 everywhere on walls. panelEdge
+  // is the true "how near is this pixel to a marked corridor edge" for each panel kind, and
+  // fixes the rail the same way — a wall is dark except where it meets floor and ceiling.
+  float wallEdge = max(smoothstep(0.92, 1.0, vH), smoothstep(0.08, 0.0, vH));
+  float panelEdge = floorLike > 0.5 ? side : wallEdge;
+  float edgeFlow = streakMask * flowPulse * (0.35 + 0.65 * panelEdge);
 
   vec3 base = mix(uDeep, uMid, smoothstep(0.0, 1.0, side * 0.7 + vH * 0.25));
   base = mix(base, uDeep, isMedian * 0.45);
   float ao = 0.55 + 0.45 * smoothstep(0.0, 1.0, min(side, 1.0));
   vec3 col = base * (0.34 + 0.66 * ao) * facingShade;
 
-  col += uAccent * lines * (0.5 + 0.5 * side) * lineGain;
+  col += uAccent * lines * (0.5 + 0.5 * panelEdge) * lineGain;
   col += uAccentAlt * edgeFlow * 0.35 * (1.0 - isMedian);
 
-  // Guide rails: the brightest thing in the corridor, always marking the flyable edges.
-  // Brightest relative to the panels — not blinding in absolute terms.
-  float rail = smoothstep(0.86, 1.0, side) * isWall;
+  // Guide rails: the brightest thing in the corridor, but only at the corridor EDGES —
+  // the wall/floor and wall/ceiling junctions and the outer lip of the floor. The old
+  // smoothstep(0.86, 1.0, side) evaluated to 1.0 over an entire wall face, which is how the
+  // lane ended up lined with full-brightness turquoise billboards — the repeating opaque
+  // rectangles players could not see the next section through.
+  float rail = isWall * wallEdge;
   float floorRail = smoothstep(0.9, 1.0, side) * floorLike;
   col += mix(uAccent, uHot, 0.35) * (rail * 0.85 + floorRail * 0.4);
 

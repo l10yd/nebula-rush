@@ -226,7 +226,8 @@ export class PropField {
       }
       case 'boostpad': {
         const chev = 1 + Math.sin(time * 7 + e.s * 0.08) * 0.09;
-        this.emit('pad', this.position, laneQuat, e.size * chev, e.size * 0.55 * chev, 0.7);
+        // (across, up, along): the pad is a floor chevron, not a sail across the lane.
+        this.emit('pad', this.position, laneQuat, e.size * chev, 0.7, e.size * 0.55 * chev);
         break;
       }
       case 'pickup': {

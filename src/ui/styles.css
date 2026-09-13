@@ -366,8 +366,11 @@ h1, h2, h3, p { margin: 0; }
 .nr-powerup span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; }
 
 .nr-countdown { position: absolute; inset: 0; display: grid; place-items: center; font-size: clamp(4rem, 18vw, 12rem); font-weight: 800; color: var(--nr-hot); text-shadow: 0 0 40px var(--nr-accent); opacity: 0; }
-.nr-countdown.is-active { opacity: 1; animation: nr-count 700ms ease-out; }
-@keyframes nr-count { from { transform: scale(1.5); opacity: 0.2; } 40% { opacity: 1; } to { transform: scale(1); opacity: 0.85; } }
+/* `forwards` matters: without it the element snapped back to the .is-active opacity when the
+   one-shot animation ended, and the final "GO" stayed burned on screen for the whole race.
+   Hud.sync drops the class by timer as well, which is the authoritative hide. */
+.nr-countdown.is-active { opacity: 1; animation: nr-count 700ms ease-out forwards; }
+@keyframes nr-count { from { transform: scale(1.5); opacity: 0.2; } 40% { opacity: 1; } to { transform: scale(1); opacity: 0; } }
 
 .nr-hud.is-damaged { animation: nr-shake-hud 220ms linear; }
 @keyframes nr-shake-hud { 25% { transform: translate(2px, -1px); } 50% { transform: translate(-2px, 1px); } 75% { transform: translate(1px, 1px); } }

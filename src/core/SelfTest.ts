@@ -124,6 +124,15 @@ export async function runSelfTest(app: App): Promise<Record<string, unknown>> {
       if (!aim.ok) errors.push(`chase camera is not following the ship (${aim.detail})`);
     }
 
+    // The countdown "GO" overlay is on top of the race until its class is dropped; a stuck
+    // one covers the screen with a full-size word for the rest of the lap. It gets a grace
+    // period of its own: at the race switch it legitimately has a fraction of a second left.
+    {
+      const cleared = await until(() => !document.querySelector('.nr-countdown.is-active'), 4000);
+      steps.push(`countdown overlay cleared ok=${cleared}`);
+      if (!cleared) errors.push('countdown "GO" overlay is still covering the race');
+    }
+
     const start = { s: rt.player.s, score: rt.hud.score };
     const sigA = entitySignature(rt.entities);
     steps.push(`lane signature at start=${sigA}`);

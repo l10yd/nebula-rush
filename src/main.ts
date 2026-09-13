@@ -944,11 +944,18 @@ async function main(): Promise<void> {
         if (app.phase === 'racing' && (app.runtime?.hud.speed ?? 0) > 40) {
           window.clearInterval(check);
           const aim = cameraAimProbe(app);
-          document.title = `autorace:${aim.ok ? 'OK' : 'FAIL'}`;
-          const pre = document.createElement('pre');
-          pre.id = 'camcheck-result';
-          pre.textContent = `${aim.ok ? 'CAMCHECK OK' : 'CAMCHECK FAIL'} ${aim.detail}`;
-          document.body.appendChild(pre);
+          // Give the countdown overlay well past its lifetime, then demand it is gone:
+          // the "GO" flash used to never clear its class and covered the race with a
+          // full-screen word for the rest of the lap.
+          window.setTimeout(() => {
+            const stuck = !!document.querySelector('.nr-countdown.is-active');
+            const ok = aim.ok && !stuck;
+            document.title = `autorace:${ok ? 'OK' : 'FAIL'}`;
+            const pre = document.createElement('pre');
+            pre.id = 'camcheck-result';
+            pre.textContent = `${ok ? 'CAMCHECK OK' : 'CAMCHECK FAIL'} ${aim.detail} countdownStuck=${stuck}`;
+            document.body.appendChild(pre);
+          }, 1500);
         }
       }, 250);
     }
