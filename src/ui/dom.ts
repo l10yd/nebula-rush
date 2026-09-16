@@ -40,6 +40,9 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 function camel(name: string): string {
+  // CSS custom properties (--nr-fill) are verbatim: the dash-uppercase rule would mangle them
+  // into an unknown property, so initial fills silently fell back to the 50% default.
+  if (name.startsWith('--')) return name;
   return name.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 

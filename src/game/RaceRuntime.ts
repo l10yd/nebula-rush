@@ -67,6 +67,8 @@ export class RaceRuntime {
   /** Last intent seen by `step`, read by the renderer for throttle/brake visuals. */
   lastInput: RaceInput = IDLE_INPUT;
   countdown = RACE.countdownSteps.length + RACE.countdownGoTime;
+  /** Guards the immediate first-tick announcement of the top countdown step (see `step`). */
+  private countdownAnnounced = false;
   time = 0;
   raceClock = 0;
   gateChain = 0;
@@ -130,6 +132,7 @@ export class RaceRuntime {
     this.fx.clear();
     this.status = 'countdown';
     this.countdown = RACE.countdownSteps.length + RACE.countdownGoTime;
+    this.countdownAnnounced = false;
     this.time = 0;
     this.raceClock = 0;
     this.gateChain = 0;
@@ -150,6 +153,13 @@ export class RaceRuntime {
     this.time += dt;
 
     if (this.status === 'countdown') {
+      if (!this.countdownAnnounced) {
+        // The ceil-gate below only fires when the *displayed* number changes, so without this
+        // announcement the HUD sits blank for the whole first second and the race visibly
+        // "starts at 2". Announce the top step the instant the countdown begins.
+        this.countdownAnnounced = true;
+        this.bus.emit('countdown', { value: RACE.countdownSteps[0] });
+      }
       const before = Math.ceil(this.countdown - RACE.countdownGoTime);
       this.countdown -= dt;
       const after = Math.ceil(this.countdown - RACE.countdownGoTime);

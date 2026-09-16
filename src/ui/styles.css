@@ -328,7 +328,7 @@ h1, h2, h3, p { margin: 0; }
 .nr-warning.is-side-right::after { content: "\00a0\25B6"; }
 @keyframes nr-warn { 50% { opacity: 0.45; } }
 
-.nr-hud-combo { font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0; transition: opacity var(--nr-fast), transform var(--nr-fast); }
+.nr-hud-combo { font-size: clamp(1.05rem, 2.3vw, 1.5rem); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0; transition: opacity var(--nr-fast), transform var(--nr-fast); }
 .nr-hud-combo.is-active { opacity: 1; }
 .nr-hud-combo[data-tier="2"] { color: var(--nr-accent); }
 .nr-hud-combo[data-tier="3"] { color: var(--nr-accent-2); transform: scale(1.08); }

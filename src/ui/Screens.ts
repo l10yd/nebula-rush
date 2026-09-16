@@ -97,7 +97,7 @@ function segment(options: { id: string; label: string; disabled?: boolean }[], v
     children: options.map((option) =>
       el('button', {
         text: option.label,
-        attrs: { type: 'button', role: 'radio', 'aria-checked': option.id === value, disabled: option.disabled === true },
+        attrs: { type: 'button', role: 'radio', 'aria-checked': option.id === value ? 'true' : 'false', disabled: option.disabled === true },
         on: {
           click: () => {
             if (!option.disabled) onPick(option.id);
@@ -157,7 +157,7 @@ function qualityRows(host: ScreenHost, rerender: () => void): HTMLElement[] {
   const requested = host.settings.get('quality');
   const actual = host.qualityTier();
   const rows: HTMLElement[] = [row('settings.quality', segment(
-    QUALITIES.map((id) => ({ id, label: i18n.t(`quality.` as StringKey) })),
+    QUALITIES.map((id) => ({ id, label: i18n.t(`quality.${id}` as StringKey) })),
     requested,
     (id) => {
       host.settings.set('quality', id as QualityTier);
@@ -167,7 +167,7 @@ function qualityRows(host: ScreenHost, rerender: () => void): HTMLElement[] {
     'settings.quality',
   ))];
   if (actual !== requested) {
-    rows.push(note(i18n.t('settings.effectiveTier', { q: i18n.t(`quality.` as StringKey) })));
+    rows.push(note(i18n.t('settings.effectiveTier', { q: i18n.t(`quality.${actual}` as StringKey) })));
   }
   return rows;
 }
@@ -678,7 +678,7 @@ export class SettingsScreen extends Screen {
     return panel([
       el('div', { class: 'nr-row nr-row--between', children: [
         title('settings.title'),
-        button('common.back', this.act('uiBack', () => this.host.goto('main_menu')), { variant: 'ghost' }),
+        button('common.back', this.act('uiBack', () => this.host.goto(this.host.returnTarget())), { variant: 'ghost' }),
       ] }),
       el('div', { class: 'nr-tabs', children: (['graphics', 'audio', 'gameplay', 'controls', 'data'] as const).map((id) =>
         el('button', {
@@ -757,7 +757,7 @@ export class SettingsScreen extends Screen {
       row('menu.runs', el('span', { class: 'nr-field-value', text: formatNumber(host.progress.value.runs) })),
       el('div', { class: 'nr-row', children: [
         button('settings.resetSave', this.act('uiBack', () => this.confirmReset()), { variant: 'danger' }),
-        button('common.close', this.act('uiBack', () => this.host.goto('main_menu')), { variant: 'ghost' }),
+        button('common.close', this.act('uiBack', () => this.host.goto(this.host.returnTarget())), { variant: 'ghost' }),
       ] }),
     ] });
   }
@@ -830,14 +830,25 @@ export class PauseScreen extends Screen {
   }
 
   protected body(): HTMLElement {
-    this.confirming = false;
+    if (this.confirming) {
+      return panel(
+        [
+          title('pause.confirmQuit'),
+          el('div', { class: 'nr-list', children: [
+            button('pause.quitYes', this.act('uiClick', () => this.leaveToMenu()), { variant: 'danger', className: 'wide' }),
+            button('pause.quitNo', this.act('uiBack', () => { this.confirming = false; this.show(); }), { className: 'wide' }),
+          ] }),
+        ],
+        'nr-panel--narrow',
+      );
+    }
     return panel(
       [
         title('pause.title'),
         el('div', { class: 'nr-list', children: [
           button('pause.resume', this.act('uiClick', () => this.host.goto('racing')), { variant: 'primary', className: 'wide' }),
           button('pause.restart', this.act('uiClick', () => this.host.goto('countdown')), { className: 'wide' }),
-          button('settings.title', this.act('uiClick', () => this.host.goto('settings')), { className: 'wide' }),
+          button('settings.title', this.act('uiClick', () => { this.confirming = false; this.host.goto('settings'); }), { className: 'wide' }),
           button('pause.quit', this.act('uiBack', () => this.quit()), { variant: 'danger', className: 'wide' }),
         ] }),
       ],
@@ -845,14 +856,19 @@ export class PauseScreen extends Screen {
     );
   }
 
+  /** A fresh open of the pause menu always shows the action list, never a stale confirmation. */
+  protected override onShow(_data?: unknown): void {
+    this.confirming = false;
+  }
+
   private quit(): void {
-    if (this.confirming) {
-      this.host.goto('main_menu');
-      return;
-    }
     this.confirming = true;
-    this.host.notify('pause.confirmQuit');
     this.show();
+  }
+
+  private leaveToMenu(): void {
+    this.confirming = false;
+    this.host.goto('main_menu');
   }
 }
 
